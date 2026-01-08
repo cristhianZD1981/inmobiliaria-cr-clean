@@ -5,16 +5,26 @@ import DetallePropiedad from "./pages/DetallePropiedad";
 function App() {
   return (
     <HashRouter>
-      <nav style={{ padding: 10, background: "#eee" }}>
-        <Link to="/" style={{ textDecoration: "none", fontWeight: "bold" }}>
-          Inmobiliaria CR
-        </Link>
-      </nav>
+      <header className="navbar">
+        <div className="navbar-brand">
+          <Link to="/">Inmobiliaria CR</Link>
+        </div>
 
-      <Routes>
-        <Route path="/" element={<Propiedades />} />
-        <Route path="/propiedad/:id" element={<DetallePropiedad />} />
-      </Routes>
+        <nav className="navbar-links">
+          <Link to="/">Propiedades</Link>
+        </nav>
+      </header>
+
+      <main className="container">
+        <Routes>
+          <Route path="/" element={<Propiedades />} />
+          <Route path="/propiedad/:id" element={<DetallePropiedad />} />
+        </Routes>
+      </main>
+
+      <footer className="footer">
+        © {new Date().getFullYear()} Inmobiliaria CR · Todos los derechos reservados
+      </footer>
     </HashRouter>
   );
 }
