@@ -125,7 +125,17 @@ export default function Home() {
               <Link to="/propiedades" className="btn btn-primary">
                 Explorar propiedades
               </Link>
-              <a href="#destacadas" className="btn btn-secondary">
+
+              {/* ✅ FIX: mantenemos <a>, pero evitamos que HashRouter rompa la ruta */}
+              <a
+                href="#destacadas"
+                className="btn btn-secondary"
+                onClick={(e) => {
+                  e.preventDefault()
+                  const el = document.getElementById("destacadas")
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+                }}
+              >
                 Ver destacadas
               </a>
             </div>

@@ -8,6 +8,7 @@ import AdminPanel from "./pages/AdminPanel"
 import AdminDashboard from "./pages/AdminDashboard"
 import AdminPropiedades from "./pages/AdminPropiedades"
 import AdminPropiedadNueva from "./pages/AdminPropiedadNueva"
+import AdminPropiedadEditar from "./pages/AdminPropiedadEditar"
 import AdminLeads from "./pages/AdminLeads"
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/propiedades" element={<AdminPropiedades />} />
         <Route path="/admin/propiedades/nueva" element={<AdminPropiedadNueva />} />
+        <Route path="/admin/propiedades/:id/editar" element={<AdminPropiedadEditar />} />
         <Route path="/admin/leads" element={<AdminLeads />} />
 
         <Route
