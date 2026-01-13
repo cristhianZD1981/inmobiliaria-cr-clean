@@ -1,32 +1,41 @@
-import { HashRouter, Routes, Route, Link } from "react-router-dom";
-import Propiedades from "./pages/Propiedades";
-import DetallePropiedad from "./pages/DetallePropiedad";
+import { HashRouter, Routes, Route } from "react-router-dom"
+import Home from "./pages/Home"
+import Listado from "./Listado"
+import DetallePropiedad from "./pages/DetallePropiedad"
 
-function App() {
+import LoginAdmin from "./pages/LoginAdmin"
+import AdminPanel from "./pages/AdminPanel"
+import AdminDashboard from "./pages/AdminDashboard"
+import AdminPropiedades from "./pages/AdminPropiedades"
+import AdminPropiedadNueva from "./pages/AdminPropiedadNueva"
+import AdminLeads from "./pages/AdminLeads"
+
+export default function App() {
   return (
     <HashRouter>
-      <header className="navbar">
-        <div className="navbar-brand">
-          <Link to="/">Inmobiliaria CR</Link>
-        </div>
+      <Routes>
+        {/* Público */}
+        <Route path="/" element={<Home />} />
+        <Route path="/propiedades" element={<Listado />} />
+        <Route path="/propiedades/:id" element={<DetallePropiedad />} />
 
-        <nav className="navbar-links">
-          <Link to="/">Propiedades</Link>
-        </nav>
-      </header>
+        {/* Admin */}
+        <Route path="/admin/login" element={<LoginAdmin />} />
+        <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/propiedades" element={<AdminPropiedades />} />
+        <Route path="/admin/propiedades/nueva" element={<AdminPropiedadNueva />} />
+        <Route path="/admin/leads" element={<AdminLeads />} />
 
-      <main className="container">
-        <Routes>
-          <Route path="/" element={<Propiedades />} />
-          <Route path="/propiedad/:id" element={<DetallePropiedad />} />
-        </Routes>
-      </main>
-
-      <footer className="footer">
-        © {new Date().getFullYear()} Inmobiliaria CR · Todos los derechos reservados
-      </footer>
+        <Route
+          path="*"
+          element={
+            <div style={{ padding: 40 }}>
+              <h2>Página no encontrada</h2>
+            </div>
+          }
+        />
+      </Routes>
     </HashRouter>
-  );
+  )
 }
-
-export default App;

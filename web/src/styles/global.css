@@ -1,98 +1,187 @@
-/* RESET BÁSICO */
+:root {
+  --primary: #0a2540;
+  --secondary: #c9a24d;
+  --background: #f5f7fa;
+  --text: #1f2933;
+  --muted: #6b7280;
+  --white: #ffffff;
+}
+
+/* RESET */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
-/* BODY */
 body {
-  background-color: #f5f7fa;
-  color: #222;
+  background-color: var(--background);
+  color: var(--text);
+  line-height: 1.6;
 }
 
 /* NAVBAR */
 .navbar {
-  background-color: #0a2540;
-  padding: 16px 32px;
+  background-color: var(--primary);
+  padding: 20px 48px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
 }
 
 .navbar a {
-  color: #fff;
+  color: var(--white);
   text-decoration: none;
-  margin-right: 16px;
-  font-weight: bold;
+  font-weight: 700;
 }
 
-.navbar a:hover {
-  text-decoration: underline;
+.navbar-links a {
+  margin-left: 28px;
+  font-size: 14px;
 }
 
-/* CONTENEDOR PRINCIPAL */
+/* CONTENEDOR */
 .container {
   max-width: 1200px;
-  margin: 32px auto;
-  padding: 0 16px;
+  margin: 56px auto;
+  padding: 0 20px;
 }
 
-/* GRID DE PROPIEDADES */
+/* TITULOS */
+.page-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 20px;
+}
+
+/* GRID */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 36px;
 }
 
-/* TARJETA DE PROPIEDAD */
+/* CARD */
 .card {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--white);
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
 }
 
 .card img {
   width: 100%;
-  height: 200px;
+  height: 230px;
   object-fit: cover;
 }
 
 .card-body {
-  padding: 16px;
+  padding: 22px;
 }
 
 .card-title {
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .card-price {
-  font-size: 15px;
-  font-weight: bold;
-  margin-bottom: 12px;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--secondary);
+  margin: 20px 0;
 }
 
-/* BOTÓN */
+.card-description {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+/* BOTONES */
 .btn {
-  display: inline-block;
-  background-color: #0a2540;
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 4px;
+  background-color: var(--primary);
+  color: var(--white);
+  padding: 12px 22px;
+  border-radius: 10px;
   text-decoration: none;
-  font-size: 14px;
+  font-weight: 800;
 }
 
-.btn:hover {
-  background-color: #123a63;
+.btn-whatsapp {
+  background-color: #25d366;
+}
+
+/* ALERTAS */
+.alert {
+  background: #ffffff;
+  border-left: 6px solid var(--primary);
+  padding: 16px;
+  border-radius: 12px;
+}
+
+/* DETALLE */
+.detalle-foto-principal img {
+  width: 100%;
+  max-height: 460px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.detalle-fotos-miniaturas {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 30px;
+}
+
+.detalle-fotos-miniaturas img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.detalle-fotos-miniaturas img.activa {
+  opacity: 1;
+  border: 2px solid var(--secondary);
+}
+
+/* MAPA */
+.mapa-propiedad {
+  width: 100%;
+  height: 380px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+}
+
+.mapa-propiedad iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* FOOTER */
+.footer {
+  background-color: var(--primary);
+  color: var(--white);
+  text-align: center;
+  padding: 28px;
+  margin-top: 100px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .container {
+    margin: 40px auto;
+  }
+
+  .page-title {
+    font-size: 26px;
+  }
+
+  .detalle-foto-principal img {
+    max-height: 300px;
+  }
 }
