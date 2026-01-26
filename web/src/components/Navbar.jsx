@@ -1,46 +1,44 @@
-import { Link } from 'react-router-dom'
+import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 
 export default function Navbar() {
+  const { i18n, t } = useTranslation()
+
+  function cambiarIdioma(e) {
+    const lang = e.target.value
+    i18n.changeLanguage(lang)
+    localStorage.setItem("lang", lang)
+  }
+
   return (
-    <header style={styles.header}>
-      <div style={styles.container}>
-        <Link to="/" style={styles.logo}>
-          InmobiliariaCR
+    <header className="navbar">
+      <div className="navbar-container">
+        <Link to="/" className="navbar-logo">
+          Propiedades del sur
         </Link>
 
-        <nav style={styles.nav}>
-          <Link to="/" style={styles.link}>Inicio</Link>
-          <Link to="/propiedades" style={styles.link}>Propiedades</Link>
-          <Link to="/contacto" style={styles.link}>Contacto</Link>
+        <nav className="navbar-links">
+          <Link to="/propiedades">{t("home.ctaBrowse")}</Link>
+          <Link to="/contacto">{t("common.contact")}</Link>
+          <Link to="/admin/login">Admin</Link>
         </nav>
+
+        {/* 🌐 SELECTOR DE IDIOMA */}
+        <select
+          onChange={cambiarIdioma}
+          value={i18n.language}
+          className="navbar-lang"
+          aria-label="Selector de idioma"
+        >
+          <option value="es">🇨🇷 Español</option>
+          <option value="en">🇺🇸 English</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="pt">🇧🇷 Português</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
       </div>
     </header>
   )
-}
-
-const styles = {
-  header: {
-    backgroundColor: '#0f172a',
-    color: '#fff'
-  },
-  container: {
-    maxWidth: '1100px',
-    margin: '0 auto',
-    padding: '15px 20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  logo: {
-    fontSize: '22px',
-    fontWeight: 'bold',
-    color: '#fff'
-  },
-  nav: {
-    display: 'flex',
-    gap: '20px'
-  },
-  link: {
-    color: '#e5e7eb'
-  }
 }

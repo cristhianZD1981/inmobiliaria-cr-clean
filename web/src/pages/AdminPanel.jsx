@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 
 export default function AdminPanel() {
   const navigate = useNavigate()
@@ -9,9 +9,24 @@ export default function AdminPanel() {
     if (!tk) navigate("/admin/login")
   }, [navigate])
 
+  const userLabel = useMemo(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "null")
+      if (u?.usuario) return u.usuario
+      if (u?.Usuario) return u.Usuario
+    } catch {}
+    try {
+      const legacy = JSON.parse(localStorage.getItem("usuario") || "null")
+      if (typeof legacy === "string") return legacy
+      if (legacy?.usuario) return legacy.usuario
+    } catch {}
+    return null
+  }, [])
+
   function logout() {
     localStorage.removeItem("token")
-    localStorage.removeItem("usuario")
+    localStorage.removeItem("usuario") // legacy
+    localStorage.removeItem("user") // nuevo
     navigate("/admin/login")
   }
 
@@ -20,7 +35,9 @@ export default function AdminPanel() {
       <header style={S.header}>
         <div>
           <h1 style={{ margin: 0 }}>Panel Administrativo</h1>
-          <p style={{ margin: "6px 0 0", opacity: 0.85 }}>Elegí una sección</p>
+          <p style={{ margin: "6px 0 0", opacity: 0.85 }}>
+            Elegí una sección{userLabel ? ` • Sesión: ${userLabel}` : ""}
+          </p>
         </div>
 
         <button onClick={logout} style={S.btnDanger}>
@@ -51,13 +68,14 @@ export default function AdminPanel() {
             </div>
           </Link>
 
-          {/* ✅ NUEVO: Sitio público */}
-          <a
-            href="/#/"
-            style={S.cardLink}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <Link to="/admin/usuarios" style={S.cardLink}>
+            <div style={S.card}>
+              <div style={S.cardTitle}>Usuarios</div>
+              <div style={S.cardDesc}>Crear administradores/agentes y sus datos de contacto</div>
+            </div>
+          </Link>
+
+          <a href="/#/" style={S.cardLink} target="_blank" rel="noreferrer">
             <div style={S.card}>
               <div style={S.cardTitle}>Sitio público</div>
               <div style={S.cardDesc}>Ver propiedades como usuario.</div>

@@ -26,40 +26,57 @@
   margin: 0 auto;
 }
 
-/* Header */
+/* ===============================
+   HEADER – LOOK "LUXURY BRAND"
+   (Sobrescritura sin romper nada)
+   =============================== */
+
 .home-header {
-  background: linear-gradient(180deg, #0b1220 0%, #0a2540 100%);
-  color: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  /* más “peso” y profundidad */
+  background: linear-gradient(180deg, #070f1b 0%, #071a2e 100%);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
 }
 
+
+
+/* línea premium sutil (dorado muy suave) */
+.home-header::after {
+  content: "";
+  display: block;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(201, 162, 77, 0.35),
+    transparent
+  );
+  opacity: 0.9;
+}
+
+/* header más alto y con más aire */
 .home-header-inner {
+  padding: 22px 0; /* antes 16px */
+  gap: 18px;
+}
+
+/* el “bloque marca” se ve más protagonista */
+.home-logo {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 0;
-}
-
-.home-logo {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
+  margin: 0;
 }
 
 .home-nav {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
+/* link principal más fino y elegante */
 .home-nav-link {
-  color: #fff;
-  text-decoration: none;
-  font-weight: 700;
-  opacity: 0.95;
+  opacity: 0.92;
+  font-weight: 800;
+  letter-spacing: 0.3px;
 }
 
 .home-nav-link:hover {
@@ -68,53 +85,84 @@
   text-underline-offset: 4px;
 }
 
+/* botón admin con más presencia (premium) */
 .home-admin-btn {
-  background: #fff;
-  color: #0f172a;
-  text-decoration: none;
-  padding: 8px 14px;
-  border-radius: 12px;
-  font-weight: 900;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 10px 16px;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.home-nav .input {
+  padding: 10px 12px;
+  border-radius: 14px;
 }
 
 /* Hero */
 .home-hero {
+  position: relative;
   background:
-    radial-gradient(900px 420px at 15% 10%, rgba(201, 162, 77, 0.18), transparent 60%),
-    radial-gradient(900px 520px at 90% 0%, rgba(255, 255, 255, 0.08), transparent 60%),
-    linear-gradient(180deg, #0a2540 0%, #0b1220 100%);
-  color: #fff;
-  padding: 64px 0 48px;
+    linear-gradient(
+      180deg,
+      rgba(2,6,23,.85),
+      rgba(2,6,23,.65)
+    ),
+    url("../assets/hero-premium.jpg") center / cover no-repeat;
+}
+
+/* Overlay dorado sutil (lujo) */
+.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      700px 360px at 15% 20%,
+      rgba(201,162,77,.22),
+      transparent 60%
+    );
+  pointer-events: none;
+}
+
+/* Overlay sutil para profundidad */
+.home-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,.35) 0%,
+    rgba(0,0,0,.15) 40%,
+    rgba(0,0,0,.05) 100%
+  );
+  pointer-events: none;
 }
 
 .home-hero-inner {
-  display: grid;
-  grid-template-columns: 1.25fr 0.9fr;
-  gap: 28px;
-  align-items: start;
+  position: relative;
+  z-index: 2;
 }
 
+/* Eyebrow más fino y elegante */
 .home-hero-eyebrow {
-  display: inline-block;
-  font-weight: 800;
-  letter-spacing: 0.35px;
-  opacity: 0.9;
-  margin-bottom: 10px;
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  font-weight: 700;
+  opacity: .9;
 }
 
+/* Título más premium */
 .home-hero-title {
-  font-size: 40px;
-  line-height: 1.12;
-  margin-bottom: 12px;
+  font-size: clamp(40px, 5vw, 56px);
   font-weight: 950;
+  line-height: 1.04;
+  text-shadow: 0 6px 30px rgba(0,0,0,.55);
 }
 
+/* Subtítulo más respirable */
 .home-hero-subtitle {
-  font-size: 16px;
-  line-height: 1.6;
-  opacity: 0.92;
-  max-width: 56ch;
+  font-size: 17px;
+  max-width: 60ch;
+  opacity: .92;
 }
 
 .home-hero-actions {
@@ -122,6 +170,16 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 18px;
+}
+
+/* Botón primario más sólido */
+.btn.btn-primary {
+  background: linear-gradient(
+    180deg,
+    #0a2540,
+    #081a2e
+  );
+  box-shadow: 0 12px 28px rgba(0,0,0,.35);
 }
 
 .btn-secondary {
@@ -152,11 +210,11 @@
   margin-top: 26px;
 }
 
+/* Stats con look más sólido */
 .home-stat {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 12px 14px;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.18);
+  backdrop-filter: blur(6px);
 }
 
 .home-stat-value {
@@ -170,14 +228,10 @@
   opacity: 0.92;
 }
 
-/* Search card */
+/* Buscador tipo tarjeta flotante */
 .home-search-card {
-  background: rgba(255, 255, 255, 0.98);
-  color: #0f172a;
-  border-radius: 18px;
-  padding: 18px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+  background: rgba(255,255,255,.96);
 }
 
 .home-search-title {
@@ -503,4 +557,338 @@
   .home-stats { grid-template-columns: 1fr; }
   .home-grid, .home-skeleton-grid, .home-benefits { grid-template-columns: 1fr; }
   .home-cta-inner { flex-direction: column; align-items: flex-start; }
+}
+
+/* Brand (logo + texto en header) */
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* logo más grande con look serio */
+.brand-mark {
+  height: 72px; /* ⬅ sube presencia */
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+}
+
+/* texto de marca más “lujo” */
+.brand-text {
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  text-transform: none;
+}
+
+/* Mobile: icon only */
+@media (max-width: 520px) {
+  .brand-mark {
+    height: 32px;
+  }
+  .brand-text {
+    display: none;
+  }
+}
+/* ===============================
+   BRAND / LOGO – INMOBILIARIA PREMIUM
+   =============================== */
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* LOGO PRINCIPAL */
+.brand-mark {
+  height: 72px; /* ⬅ LOGO PROTAGONISTA */
+  width: auto;
+  display: block;
+  filter:
+    drop-shadow(0 4px 10px rgba(0,0,0,.35));
+}
+
+/* TEXTO DE MARCA */
+.brand-text {
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.6px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* HEADER más aire para el logo */
+.home-header-inner {
+  padding: 22px 0;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .brand-mark {
+    height: 56px;
+  }
+
+  .brand-text {
+    font-size: 18px;
+  }
+}
+
+/* Mobile pequeño: solo logo */
+@media (max-width: 560px) {
+  .brand-mark {
+    height: 44px;
+  }
+
+  .brand-text {
+    display: none;
+  }
+}
+
+/* =========================================================
+   AJUSTES FINALES – LOGO MÁS VISIBLE + TEXTO HERO LEGIBLE
+   (Se agregan al final para que NO rompa nada)
+   ========================================================= */
+
+/* 1) Logo más grande y visible */
+.brand-mark {
+  height: 110px; /* ⬅ AUMENTO REAL de visibilidad */
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.60));
+}
+
+/* 2) Texto junto al logo más claro */
+.brand-text {
+  color: rgba(255,255,255,.96);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+
+/* 3) Aumentar contraste del HERO (texto más visible) */
+.home-hero::after {
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,.62) 0%,
+    rgba(0,0,0,.40) 45%,
+    rgba(0,0,0,.22) 100%
+  );
+}
+
+.home-hero-title {
+  color: #ffffff;
+  text-shadow:
+    0 6px 28px rgba(0,0,0,.70),
+    0 1px 0 rgba(0,0,0,.55);
+}
+
+.home-hero-subtitle {
+  color: rgba(255,255,255,.96);
+  text-shadow: 0 3px 16px rgba(0,0,0,.60);
+}
+
+.home-hero-eyebrow {
+  color: rgba(255,255,255,.88);
+}
+
+/* Header un poco más alto para balance con el logo grande */
+.home-header-inner {
+  padding: 30px 0;
+}
+
+/* Responsive: bajar logo en pantallas pequeñas */
+@media (max-width: 900px) {
+  .brand-mark {
+    height: 78px;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand-mark {
+    height: 52px;
+  }
+}
+/* ======================================================
+   FIXES VISUALES – CONTRASTE + LOGO + HEADER (NO BREAK)
+   ====================================================== */
+
+/* -------- HEADER: contraste y legibilidad -------- */
+
+.home-header,
+.home-header * {
+  color: #ffffff;
+}
+
+.home-nav-link,
+.home-footer-link,
+.home-nav a {
+  color: #e5e7eb !important;
+  text-decoration: none;
+}
+
+.home-nav-link:hover,
+.home-footer-link:hover {
+  color: #ffffff !important;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* eliminar morado por defecto de links visitados */
+.home-header a:visited,
+.home-header a:active {
+  color: #e5e7eb;
+}
+
+/* -------- LOGO: más grande y protagonista -------- */
+
+.brand-mark {
+  height: 92px; /* ⬅ LOGO GRANDE Y VISIBLE */
+  width: auto;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.55));
+}
+
+.brand-text {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 950;
+  letter-spacing: 0.8px;
+}
+
+/* -------- Selector de idioma (más pequeño y elegante) -------- */
+
+.home-header select,
+.home-header .input {
+  font-size: 13px;
+  padding: 8px 12px;
+  height: 36px;
+  max-width: 160px;
+  border-radius: 10px;
+}
+
+/* -------- HERO: texto mucho más visible -------- */
+
+.home-hero-title {
+  color: #ffffff;
+  text-shadow: 0 8px 32px rgba(0,0,0,.75);
+}
+
+.home-hero-subtitle {
+  color: rgba(255,255,255,.92);
+  font-size: 18px;
+  text-shadow: 0 4px 18px rgba(0,0,0,.6);
+}
+
+/* eyebrow más visible */
+.home-hero-eyebrow {
+  color: rgba(255,255,255,.85);
+}
+
+/* -------- Responsive -------- */
+
+@media (max-width: 900px) {
+  .brand-mark {
+    height: 68px;
+  }
+
+  .brand-text {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand-mark {
+    height: 52px;
+  }
+
+  .brand-text {
+    display: none;
+  }
+}
+/* ======================================================
+   AJUSTES EXTRA – LOGO MÁS GRANDE + SELECTOR IDIOMA STYLE
+   (Pegar al FINAL del home.css)
+   ====================================================== */
+
+/* 1) Logo más grande + un poco más a la izquierda */
+.home-header .brand-link {
+  gap: 10px; /* antes estaba muy separado */
+}
+
+.home-header .brand-mark {
+  height: 112px;            /* ⬅ más grande */
+  width: auto;
+  margin-left: -10px;       /* ⬅ un poco más a la izquierda */
+  margin-right: 2px;        /* ⬅ más pegado al texto */
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.60));
+}
+
+.home-header .brand-text {
+  color: rgba(255, 255, 255, 0.96); /* más claro */
+}
+
+/* 2) Selector de idioma: fondo y letras con mejor look */
+.home-header select,
+.home-header .input,
+.home-header .lang-select {
+  background: rgba(255, 255, 255, 0.10);  /* fondo oscuro elegante */
+  color: #ffffff;                          /* letras blancas */
+  border: 1px solid rgba(201, 162, 77, 0.55); /* borde dorado suave */
+  box-shadow: 0 10px 20px rgba(0,0,0,.20);
+}
+
+.home-header select:focus,
+.home-header .input:focus,
+.home-header .lang-select:focus {
+  outline: none;
+  border-color: rgba(201, 162, 77, 0.85);
+  box-shadow: 0 0 0 4px rgba(201, 162, 77, 0.18);
+}
+
+/* Importante: el <option> en algunos navegadores ignora estilos,
+   pero esto ayuda donde sí se respeta */
+.home-header select option {
+  background: #0b1220;
+  color: #ffffff;
+}
+
+/* 3) Ajuste de tamaño del selector (para que no se vea gigante) */
+.home-header select,
+.home-header .input,
+.home-header .lang-select {
+  height: 38px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 12px;
+  max-width: 170px;
+}
+
+/* 4) Responsive: para que el header no se rompa en pantallas medianas */
+@media (max-width: 900px) {
+  .home-header .brand-mark {
+    height: 78px;
+    margin-left: -6px;
+  }
+
+  .home-header select,
+  .home-header .input,
+  .home-header .lang-select {
+    max-width: 150px;
+  }
+}
+
+/* 5) Mobile: logo visible pero sin romper layout */
+@media (max-width: 560px) {
+  .home-header .brand-mark {
+    height: 58px;
+    margin-left: -4px;
+  }
+
+  .home-header .brand-text {
+    display: none; /* si querés mantener texto en móvil me decís y lo ajusto */
+  }
 }

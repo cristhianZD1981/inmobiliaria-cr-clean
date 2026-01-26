@@ -1,20 +1,46 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { getIntlLocale } from "../i18n"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001"
-const WHATSAPP_NUMBER = "50683269055"
 
-function formatMoney(value, moneda) {
+// Fallbacks (por si alguna propiedad no trae Agente o viene incompleto)
+const DEFAULT_WHATSAPP_NUMBER = "50683269055"
+const DEFAULT_EMAIL = "info@tudominio.com"
+
+function formatMoney(value, moneda, locale) {
   const num = Number(value || 0)
   const currency = moneda === "USD" ? "USD" : "CRC"
-  return new Intl.NumberFormat("es-CR", {
+  return new Intl.NumberFormat(locale || "es-CR", {
     style: "currency",
     currency,
     maximumFractionDigits: currency === "CRC" ? 0 : 2,
   }).format(num)
 }
 
+// wa.me requiere solo dígitos (sin +, espacios, guiones)
+function normalizeWhatsAppNumber(raw) {
+  if (!raw) return null
+  const digits = String(raw).replace(/\D+/g, "")
+  return digits.length >= 8 ? digits : null
+}
+
+function buildWhatsAppMessage(propiedad, extraLines = []) {
+  const titulo = propiedad?.Titulo || "Propiedad"
+  const pid = propiedad?.PropiedadId != null ? propiedad.PropiedadId : ""
+  const codigo = propiedad?.CodigoPublico ? propiedad.CodigoPublico : ""
+  const idLine = codigo ? `Código: ${codigo} • ID: ${pid}` : `ID: ${pid}`
+
+  const base = `Hola, quiero información sobre la propiedad: ${titulo}\n${idLine}`
+  const extra = (extraLines || []).filter(Boolean).join("\n")
+  return extra ? `${base}\n\n${extra}` : base
+}
+
 export default function DetallePropiedad() {
+  const { t, i18n } = useTranslation()
+  const intlLocale = useMemo(() => getIntlLocale(i18n.language), [i18n.language])
+
   const { id } = useParams()
 
   const [propiedad, setPropiedad] = useState(null)
@@ -67,29 +93,60 @@ export default function DetallePropiedad() {
     }
   }
 
+  // Datos de contacto dinámicos (desde backend)
+  const agente = propiedad?.Agente || null
+
+  const agenteNombre = useMemo(() => {
+    if (!agente) return null
+    const n = [agente.Nombre, agente.Apellidos].filter(Boolean).join(" ").trim()
+    return n || null
+  }, [agente])
+
+  const whatsappNumber = useMemo(() => {
+    const w = normalizeWhatsAppNumber(agente?.WhatsApp) || normalizeWhatsAppNumber(agente?.Telefono)
+    return w || DEFAULT_WHATSAPP_NUMBER
+  }, [agente])
+
+  const emailContacto = useMemo(() => {
+    const e = (agente?.Email || "").trim()
+    return e || DEFAULT_EMAIL
+  }, [agente])
+
   const whatsappHref = useMemo(() => {
     if (!propiedad) return "#"
-    const msg = `Hola, quiero información sobre la propiedad: ${propiedad.Titulo} (ID: ${propiedad.PropiedadId})`
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
-  }, [propiedad])
+    const msg = buildWhatsAppMessage(propiedad)
+    return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`
+  }, [propiedad, whatsappNumber])
 
   const whatsappHrefConNombre = useMemo(() => {
     if (!propiedad) return "#"
     const n = (lead.Nombre || "").trim()
-    const t = (lead.Telefono || "").trim()
-    const e = (lead.Email || "").trim()
+    const tel = (lead.Telefono || "").trim()
+    const em = (lead.Email || "").trim()
+    const msj = (lead.Mensaje || "").trim()
+
     const extra = [
       n ? `Nombre: ${n}` : null,
-      t ? `Tel: ${t}` : null,
-      e ? `Email: ${e}` : null,
-      lead.Mensaje?.trim() ? `Mensaje: ${lead.Mensaje.trim()}` : null,
+      tel ? `Tel: ${tel}` : null,
+      em ? `Email: ${em}` : null,
+      msj ? `Mensaje: ${msj}` : null,
     ]
-      .filter(Boolean)
-      .join("\n")
 
-    const msg = `Hola, quiero información sobre la propiedad: ${propiedad.Titulo} (ID: ${propiedad.PropiedadId})\n\n${extra}`
-    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
-  }, [propiedad, lead])
+    const msg = buildWhatsAppMessage(propiedad, extra)
+    return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`
+  }, [propiedad, lead, whatsappNumber])
+
+  const mailtoHref = useMemo(() => {
+    if (!propiedad) return `mailto:${emailContacto}`
+    const subject = `Consulta propiedad ${propiedad.CodigoPublico || propiedad.PropiedadId || ""}`.trim()
+    const body = buildWhatsAppMessage(propiedad, [
+      (lead.Nombre || "").trim() ? `Nombre: ${(lead.Nombre || "").trim()}` : null,
+      (lead.Telefono || "").trim() ? `Tel: ${(lead.Telefono || "").trim()}` : null,
+      (lead.Email || "").trim() ? `Email: ${(lead.Email || "").trim()}` : null,
+      (lead.Mensaje || "").trim() ? `Mensaje: ${(lead.Mensaje || "").trim()}` : null,
+    ])
+    return `mailto:${emailContacto}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }, [propiedad, emailContacto, lead])
 
   function onLeadChange(e) {
     const { name, value } = e.target
@@ -129,7 +186,7 @@ export default function DetallePropiedad() {
           Telefono: tel || null,
           Email: email || null,
           Mensaje: (lead.Mensaje || "").trim() || null,
-          Fuente: "web",
+          Canal: "web", // ✅ antes estaba "Fuente"
           _hp: lead._hp || "",
         }),
       })
@@ -143,7 +200,6 @@ export default function DetallePropiedad() {
 
       setLeadOk(true)
       setLeadMsg("¡Listo! Recibimos tu consulta. En breve te contactamos.")
-      // opcional: limpiar mensaje pero dejar nombre/tel/email
       setLead((p) => ({ ...p, Mensaje: "" }))
     } catch (err) {
       setLeadOk(false)
@@ -165,7 +221,7 @@ export default function DetallePropiedad() {
     return (
       <div className="container" style={{ padding: 20 }}>
         <Link to="/propiedades" style={{ textDecoration: "none", fontWeight: 900 }}>
-          ← Volver
+          {t("common.back")}
         </Link>
         <p style={{ marginTop: 14, color: "#991b1b", fontWeight: 900 }}>{error}</p>
       </div>
@@ -176,7 +232,7 @@ export default function DetallePropiedad() {
     return (
       <div className="container" style={{ padding: 20 }}>
         <Link to="/propiedades" style={{ textDecoration: "none", fontWeight: 900 }}>
-          ← Volver
+          {t("common.back")}
         </Link>
         <p style={{ marginTop: 14 }}>No se encontró la propiedad.</p>
       </div>
@@ -186,7 +242,7 @@ export default function DetallePropiedad() {
   return (
     <div className="container" style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
       <Link to="/propiedades" style={{ textDecoration: "none", fontWeight: 900 }}>
-        ← Volver
+        {t("common.back")}
       </Link>
 
       <h1 style={{ marginTop: 12 }}>{propiedad.Titulo}</h1>
@@ -226,10 +282,10 @@ export default function DetallePropiedad() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.6fr", gap: 16, marginTop: 18 }}>
         <div style={card}>
-          <h3 style={{ marginTop: 0 }}>Descripción</h3>
+          <h3 style={{ marginTop: 0 }}>{t("detail.description")}</h3>
           <p style={{ whiteSpace: "pre-line" }}>{propiedad.Descripcion || "Sin descripción."}</p>
 
-          <h3 style={{ marginTop: 16 }}>Detalles</h3>
+          <h3 style={{ marginTop: 16 }}>{t("detail.details")}</h3>
           <ul style={{ paddingLeft: 18, lineHeight: 1.7 }}>
             {propiedad.Tipo && (
               <li>
@@ -272,14 +328,35 @@ export default function DetallePropiedad() {
         <div style={card}>
           <h3 style={{ marginTop: 0 }}>Precio</h3>
           <p style={{ fontSize: 24, fontWeight: 900, margin: "8px 0 0" }}>
-            {formatMoney(propiedad.Precio, propiedad.Moneda)}
+            {formatMoney(propiedad.Precio, propiedad.Moneda, intlLocale)}
           </p>
+
+          {/* Contacto dinámico */}
+          {(agenteNombre || agente?.Telefono || agente?.WhatsApp || agente?.Email) && (
+            <div style={{ marginTop: 10, opacity: 0.9, fontSize: 14, lineHeight: 1.4 }}>
+              {agenteNombre && (
+                <div>
+                  <strong>Agente:</strong> {agenteNombre}
+                </div>
+              )}
+              {(agente?.WhatsApp || agente?.Telefono) && (
+                <div>
+                  <strong>Tel:</strong> {agente?.WhatsApp || agente?.Telefono}
+                </div>
+              )}
+              {agente?.Email && (
+                <div>
+                  <strong>Email:</strong> {agente.Email}
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
             <a href={whatsappHref} target="_blank" rel="noreferrer" style={btnPrimary}>
               WhatsApp
             </a>
-            <a href="mailto:info@tudominio.com?subject=Consulta%20de%20propiedad" style={btn}>
+            <a href={mailtoHref} style={btn}>
               Email
             </a>
           </div>

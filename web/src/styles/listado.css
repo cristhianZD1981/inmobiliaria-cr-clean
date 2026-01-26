@@ -1,20 +1,18 @@
 /* Listado */
 .listado-page {
   min-height: 100vh;
-  background: var(--background);
-  color: var(--text);
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
 }
 
 .listado-container {
-  width: min(1100px, calc(100% - 40px));
+  width: min(1120px, calc(100% - 40px));
   margin: 0 auto;
 }
 
-/* Header */
 .listado-header {
-  background: #0b1220;
+  background: linear-gradient(180deg, #0b1220 0%, #0a2540 100%);
   color: #fff;
   position: sticky;
   top: 0;
@@ -30,7 +28,6 @@
 }
 
 .listado-logo {
-  margin: 0;
   font-size: 20px;
   font-weight: 950;
   letter-spacing: 0.3px;
@@ -49,6 +46,7 @@
 }
 
 .listado-nav-link:hover {
+  color: #fff;
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -59,55 +57,61 @@
   text-decoration: none;
   padding: 8px 14px;
   border-radius: 12px;
-  font-weight: 950;
+  font-weight: 900;
   border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
-/* Content */
+.lang-select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: #fff;
+  color: #0f172a;
+  font-weight: 700;
+}
+
 .listado-content {
-  padding: 22px 0;
+  padding: 26px 0 34px;
 }
 
 .listado-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .listado-title {
-  margin: 0;
+  font-size: 28px;
   font-weight: 950;
   color: #0f172a;
 }
 
 .listado-badge {
-  background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-weight: 950;
-  font-size: 12px;
+  background: rgba(15, 23, 42, 0.06);
   border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.80);
 }
 
-/* Filters */
 .listado-filters {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
   background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  padding: 14px;
-  border-radius: 16px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.06);
-  margin-bottom: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.05);
 }
 
 .listado-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.18);
   outline: none;
@@ -121,39 +125,27 @@
 }
 
 .listado-actions {
-  grid-column: 1 / -1;
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
 }
 
-/* Si tu global.css no tiene btn-secondary, aquí lo dejamos definido */
-.btn-secondary {
-  background: transparent;
-  border: 1px solid rgba(15, 23, 42, 0.25);
-  color: #0f172a;
-}
-
-.btn-secondary:hover {
-  border-color: rgba(15, 23, 42, 0.45);
-}
-
-/* Info/Error */
 .listado-info {
-  color: rgba(15, 23, 42, 0.75);
-  margin: 10px 0;
+  margin-top: 14px;
+  color: rgba(15, 23, 42, 0.72);
+  font-weight: 700;
 }
 
 .listado-error {
-  color: #991b1b;
+  margin-top: 14px;
+  color: #b91c1c;
   font-weight: 800;
-  margin: 10px 0;
 }
 
-/* Grid cards */
 .listado-grid {
+  margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -200,7 +192,7 @@
   left: 10px;
   bottom: 10px;
   font-size: 12px;
-  font-weight: 950;
+  font-weight: 900;
   padding: 6px 10px;
   border-radius: 999px;
   color: #0f172a;
@@ -213,20 +205,19 @@
 }
 
 .listado-card-title {
-  font-weight: 950;
+  font-weight: 900;
   color: #0f172a;
   line-height: 1.25;
-  margin-bottom: 6px;
 }
 
 .listado-card-price {
+  margin-top: 8px;
   font-weight: 950;
-  font-size: 18px;
   color: #0f172a;
-  margin-bottom: 4px;
 }
 
 .listado-card-location {
+  margin-top: 4px;
   font-size: 13px;
   color: rgba(15, 23, 42, 0.72);
 }
@@ -240,22 +231,58 @@
   color: rgba(15, 23, 42, 0.72);
 }
 
-/* Footer */
 .listado-footer {
   margin-top: auto;
-  background: rgba(15, 23, 42, 0.06);
-  padding: 16px;
+  padding: 22px 0;
   text-align: center;
-  color: rgba(15, 23, 42, 0.75);
+  color: rgba(15, 23, 42, 0.70);
+  font-weight: 700;
 }
 
 /* Responsive */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .listado-filters {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .listado-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
+@media (max-width: 720px) {
   .listado-grid {
     grid-template-columns: 1fr;
+  }
+  .listado-title {
+    font-size: 24px;
+  }
+}
+
+/* Brand (logo + texto en header) */
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.brand-mark {
+  height: 34px;
+  width: auto;
+  display: block;
+}
+
+.brand-text {
+  display: inline-block;
+}
+
+/* Mobile: icon only */
+@media (max-width: 520px) {
+  .brand-mark {
+    height: 32px;
+  }
+  .brand-text {
+    display: none;
   }
 }

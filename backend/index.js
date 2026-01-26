@@ -49,7 +49,7 @@ const dbConfig = {
 
 sql
   .connect(dbConfig)
-  .then(() => console.log(`✅ Conectado a SQL Server. API en http://localhost:${PORT}`))
+  .then(() => console.log(`✅ Conectado a SQL Server. API lista en puerto ${PORT}`))
   .catch((e) => console.error("❌ ERROR CONEXIÓN SQL:", e))
 
 // ===============================
@@ -92,9 +92,128 @@ function safeNumber(v) {
   return Number.isFinite(n) ? n : null
 }
 
+function looksLikeEmail(s) {
+  if (!s) return false
+  const v = String(s).trim()
+  return v.includes("@") && v.includes(".") && v.length <= 320
+}
+
+function guessNombreFromUsuario(usuario) {
+  const u = String(usuario || "").trim()
+  if (!u) return "Administrador"
+  if (looksLikeEmail(u)) return u.split("@")[0].replace(/[._-]+/g, " ").trim() || "Administrador"
+  return u.slice(0, 60)
+}
+
+function sqlUniqueViolation(err) {
+  // SQL Server: 2601/2627 = unique constraint / unique index
+  const num = err?.number || err?.originalError?.info?.number
+  return num === 2601 || num === 2627
+}
+
+// ===============================
+// Detección de esquema (para no romper si faltan columnas)
+// ===============================
+const _colCache = new Map()
+async function hasColumn(tableName, columnName) {
+  const key = `${tableName}.${columnName}`
+  if (_colCache.has(key)) return _colCache.get(key)
+
+  const q = `SELECT COL_LENGTH('${tableName}', '${columnName}') AS L;`
+  try {
+    const r = await new sql.Request().query(q)
+    const ok = r.recordset?.[0]?.L != null
+    _colCache.set(key, ok)
+    return ok
+  } catch {
+    _colCache.set(key, false)
+    return false
+  }
+}
+
+const schema = {
+  uaUsuarioId: null, // dbo.UsuarioAdmin.UsuarioId
+  leadAsignadoAId: null, // dbo.Lead.AsignadoAId
+  leadFechaCreacion: null, // dbo.Lead.FechaCreacion
+}
+
+async function detectSchemaOnce() {
+  if (schema.uaUsuarioId != null) return
+
+  schema.uaUsuarioId = await hasColumn("dbo.UsuarioAdmin", "UsuarioId")
+  schema.leadAsignadoAId = await hasColumn("dbo.Lead", "AsignadoAId")
+  schema.leadFechaCreacion = await hasColumn("dbo.Lead", "FechaCreacion")
+
+  if (!schema.uaUsuarioId) {
+    console.warn(
+      "⚠️ dbo.UsuarioAdmin.UsuarioId NO existe. " +
+        "Para asociar propiedades al contacto (dbo.Usuario), agregá esa columna y el FK."
+    )
+  }
+}
+
+// ===============================
+// Vincular UsuarioAdmin -> Usuario (contacto/agente)
+// ===============================
+async function ensureUsuarioIdForAdminRow(uAdminRow) {
+  await detectSchemaOnce()
+  if (!schema.uaUsuarioId) return null
+
+  if (uAdminRow?.UsuarioId) return Number(uAdminRow.UsuarioId)
+
+  const usuarioStr = uAdminRow?.Usuario
+  if (!looksLikeEmail(usuarioStr)) {
+    return null
+  }
+
+  const email = String(usuarioStr).trim()
+  const nombre = clipStr(uAdminRow?.Nombre, 160) || guessNombreFromUsuario(email)
+
+  const existing = await new sql.Request()
+    .input("Email", sql.NVarChar(320), email)
+    .query(`
+      SELECT TOP 1 UsuarioId
+      FROM dbo.Usuario
+      WHERE Email = @Email
+    `)
+
+  let usuarioId = existing.recordset?.[0]?.UsuarioId
+
+  if (!usuarioId) {
+    const ins = await new sql.Request()
+      .input("Nombre", sql.NVarChar(160), nombre)
+      .input("Apellidos", sql.NVarChar(240), null)
+      .input("Email", sql.NVarChar(320), email)
+      .input("Telefono", sql.NVarChar(50), null)
+      .input("WhatsApp", sql.NVarChar(50), null)
+      .input("PasswordHash", sql.VarBinary(256), null)
+      .input("Activo", sql.Bit, 1)
+      .query(`
+        INSERT INTO dbo.Usuario (Nombre, Apellidos, Email, Telefono, WhatsApp, PasswordHash, Activo, FechaCreacion)
+        OUTPUT INSERTED.UsuarioId
+        VALUES (@Nombre, @Apellidos, @Email, @Telefono, @WhatsApp, @PasswordHash, @Activo, SYSUTCDATETIME())
+      `)
+
+    usuarioId = ins.recordset?.[0]?.UsuarioId
+  }
+
+  await new sql.Request()
+    .input("UsuarioAdminId", sql.Int, Number(uAdminRow.UsuarioAdminId))
+    .input("UsuarioId", sql.Int, Number(usuarioId))
+    .query(`
+      UPDATE dbo.UsuarioAdmin
+      SET UsuarioId = @UsuarioId,
+          ActualizadoEn = SYSUTCDATETIME()
+      WHERE UsuarioAdminId = @UsuarioAdminId
+    `)
+
+  return Number(usuarioId)
+}
+
+// ===============================
 // Anti-spam simple en memoria (por IP)
+// ===============================
 const leadRate = new Map()
-// regla: máx 5 leads cada 10 min por IP
 const LEAD_WINDOW_MS = 10 * 60 * 1000
 const LEAD_MAX = 5
 
@@ -136,10 +255,21 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   try {
+    await detectSchemaOnce()
+
+    const selectUsuarioId = schema.uaUsuarioId ? ", UsuarioId" : ""
+
     const r = await new sql.Request()
-      .input("Usuario", sql.NVarChar(60), usuario)
+      .input("Usuario", sql.NVarChar(120), usuario)
       .query(`
-        SELECT TOP 1 *
+        SELECT TOP 1
+          UsuarioAdminId,
+          Usuario,
+          Nombre,
+          Rol,
+          Activo,
+          PasswordHash
+          ${selectUsuarioId}
         FROM dbo.UsuarioAdmin
         WHERE Usuario = @Usuario
       `)
@@ -149,16 +279,387 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Credenciales inválidas" })
     }
 
+    if (u.Activo === false || u.Activo === 0) {
+      return res.status(403).json({ error: "Usuario inactivo" })
+    }
+
+    let usuarioId = null
+    if (schema.uaUsuarioId) {
+      usuarioId = await ensureUsuarioIdForAdminRow(u)
+    }
+
     const token = jwt.sign(
-      { usuarioAdminId: u.UsuarioAdminId, usuario: u.Usuario },
+      {
+        usuarioAdminId: u.UsuarioAdminId,
+        usuario: u.Usuario,
+        rol: u.Rol || "ADMIN",
+        usuarioId,
+      },
       JWT_SECRET,
       { expiresIn: "12h" }
     )
 
-    res.json({ token })
+    res.json({
+      token,
+      user: {
+        usuarioAdminId: u.UsuarioAdminId,
+        usuario: u.Usuario,
+        rol: u.Rol || "ADMIN",
+        usuarioId,
+      },
+    })
   } catch (e) {
     console.error("ERROR LOGIN:", e)
     res.status(500).json({ error: "Error en login" })
+  }
+})
+
+// ===============================
+// ADMIN - USUARIOS (CRUD) ✅ NUEVO/COMPLETO
+// Endpoints esperados por el frontend:
+// - GET    /api/admin/usuarios
+// - POST   /api/admin/usuarios
+// - PUT    /api/admin/usuarios/:id
+// - DELETE /api/admin/usuarios/:id   (soft delete)
+// ===============================
+
+app.get("/api/admin/usuarios", authRequired, async (req, res) => {
+  try {
+    await detectSchemaOnce()
+    if (!schema.uaUsuarioId) {
+      return res.status(500).json({
+        error: "La BD no tiene dbo.UsuarioAdmin.UsuarioId. Agregalo para habilitar administración de usuarios.",
+      })
+    }
+
+    const data = await new sql.Request().query(`
+      SELECT
+        ua.UsuarioAdminId,
+        ua.Usuario,
+        ua.Rol,
+        ua.Activo AS Activo,
+        ua.UsuarioId,
+        COALESCE(u.Nombre, ua.Nombre) AS Nombre,
+        u.Apellidos AS Apellidos,
+        COALESCE(u.Email, ua.Usuario) AS Email,
+        u.Telefono AS Telefono,
+        u.WhatsApp AS WhatsApp
+      FROM dbo.UsuarioAdmin ua
+      LEFT JOIN dbo.Usuario u ON u.UsuarioId = ua.UsuarioId
+      ORDER BY ua.UsuarioAdminId DESC
+    `)
+
+    res.json(data.recordset || [])
+  } catch (e) {
+    console.error("ERROR LISTANDO USUARIOS:", e)
+    res.status(500).json({ error: "Error listando usuarios" })
+  }
+})
+
+app.post("/api/admin/usuarios", authRequired, async (req, res) => {
+  const b = req.body || {}
+
+  const email = clipStr(b.Email, 320)
+  const password = clipStr(b.Password, 200)
+  const nombre = clipStr(b.Nombre, 160)
+  const apellidos = clipStr(b.Apellidos, 240)
+  const telefono = clipStr(b.Telefono, 50)
+  const whatsapp = clipStr(b.WhatsApp, 50)
+
+  const rol = clipStr(b.Rol, 60) || "ADMIN"
+  const activo = b.Activo == null ? 1 : b.Activo ? 1 : 0
+
+  const usuarioLogin = clipStr(b.Usuario, 120) || email
+
+  if (!email || !looksLikeEmail(email)) return res.status(400).json({ error: "Email inválido" })
+  if (!usuarioLogin) return res.status(400).json({ error: "Usuario requerido" })
+  if (!password || password.length < 6) return res.status(400).json({ error: "Password mínimo 6 caracteres" })
+  if (!nombre) return res.status(400).json({ error: "Nombre es requerido" })
+
+  try {
+    await detectSchemaOnce()
+    if (!schema.uaUsuarioId) {
+      return res.status(500).json({
+        error: "La BD no tiene dbo.UsuarioAdmin.UsuarioId. Agregalo para habilitar administración de usuarios.",
+      })
+    }
+
+    const hash = bcrypt.hashSync(password, 10)
+
+    const tx = new sql.Transaction()
+    await tx.begin()
+
+    // 1) Crear dbo.Usuario (contacto)
+    const insU = await new sql.Request(tx)
+      .input("Nombre", sql.NVarChar(160), nombre)
+      .input("Apellidos", sql.NVarChar(240), apellidos)
+      .input("Email", sql.NVarChar(320), email)
+      .input("Telefono", sql.NVarChar(50), telefono)
+      .input("WhatsApp", sql.NVarChar(50), whatsapp)
+      .input("PasswordHash", sql.VarBinary(256), null)
+      .input("Activo", sql.Bit, activo)
+      .query(`
+        INSERT INTO dbo.Usuario (Nombre, Apellidos, Email, Telefono, WhatsApp, PasswordHash, Activo, FechaCreacion)
+        OUTPUT INSERTED.UsuarioId
+        VALUES (@Nombre, @Apellidos, @Email, @Telefono, @WhatsApp, @PasswordHash, @Activo, SYSUTCDATETIME())
+      `)
+
+    const usuarioId = insU.recordset?.[0]?.UsuarioId
+
+    // 2) Crear dbo.UsuarioAdmin (login)
+    const insUA = await new sql.Request(tx)
+      .input("Usuario", sql.NVarChar(120), usuarioLogin)
+      .input("Nombre", sql.NVarChar(240), `${nombre}${apellidos ? " " + apellidos : ""}`.trim())
+      .input("Rol", sql.NVarChar(60), rol)
+      .input("PasswordHash", sql.NVarChar(510), hash)
+      .input("Activo", sql.Bit, activo)
+      .input("UsuarioId", sql.Int, usuarioId)
+      .query(`
+        INSERT INTO dbo.UsuarioAdmin (Usuario, Nombre, Rol, PasswordHash, Activo, UsuarioId, CreadoEn)
+        OUTPUT INSERTED.UsuarioAdminId
+        VALUES (@Usuario, @Nombre, @Rol, @PasswordHash, @Activo, @UsuarioId, SYSUTCDATETIME())
+      `)
+
+    await tx.commit()
+
+    res.json({
+      ok: true,
+      UsuarioId: usuarioId,
+      UsuarioAdminId: insUA.recordset?.[0]?.UsuarioAdminId,
+    })
+  } catch (e) {
+    try {
+      // si falló después del begin y no hizo commit
+      // (si no hay transacción activa, no pasa nada)
+      // eslint-disable-next-line no-empty
+    } catch {}
+
+    if (sqlUniqueViolation(e)) {
+      return res.status(409).json({
+        error: "Ya existe un usuario con ese Email o Usuario (login).",
+      })
+    }
+
+    console.error("ERROR CREANDO USUARIO:", e)
+    res.status(500).json({ error: "Error creando usuario" })
+  }
+})
+
+// Handler único para PUT/PATCH (para no duplicar lógica)
+async function updateAdminUsuarioHandler(req, res) {
+  const usuarioAdminId = isFiniteId(req.params.id)
+  if (!usuarioAdminId) return res.status(400).json({ error: "Id inválido" })
+
+  const b = req.body || {}
+
+  const email = clipStr(b.Email, 320)
+  const nombre = clipStr(b.Nombre, 160)
+  const apellidos = clipStr(b.Apellidos, 240)
+  const telefono = clipStr(b.Telefono, 50)
+  const whatsapp = clipStr(b.WhatsApp, 50)
+
+  const rol = clipStr(b.Rol, 60)
+  const activo = b.Activo == null ? null : b.Activo ? 1 : 0
+
+  const usuarioLogin = clipStr(b.Usuario, 120)
+  const newPassword = clipStr(b.Password, 200)
+
+  try {
+    await detectSchemaOnce()
+    if (!schema.uaUsuarioId) {
+      return res.status(500).json({
+        error: "La BD no tiene dbo.UsuarioAdmin.UsuarioId. Agregalo para habilitar administración de usuarios.",
+      })
+    }
+
+    const tx = new sql.Transaction()
+    await tx.begin()
+
+    // Fila actual
+    const curR = await new sql.Request(tx)
+      .input("UsuarioAdminId", sql.Int, usuarioAdminId)
+      .query(`
+        SELECT TOP 1 UsuarioAdminId, Usuario, Nombre, Rol, Activo, UsuarioId
+        FROM dbo.UsuarioAdmin
+        WHERE UsuarioAdminId = @UsuarioAdminId
+      `)
+
+    const cur = curR.recordset?.[0]
+    if (!cur) {
+      await tx.rollback()
+      return res.status(404).json({ error: "Usuario admin no encontrado" })
+    }
+
+    let usuarioId = cur.UsuarioId
+
+    // Si no hay vínculo y viene email válido, crear Usuario y vincular
+    if (!usuarioId && email && looksLikeEmail(email)) {
+      const nombreReq = nombre || guessNombreFromUsuario(email)
+
+      const insU = await new sql.Request(tx)
+        .input("Nombre", sql.NVarChar(160), nombreReq)
+        .input("Apellidos", sql.NVarChar(240), apellidos)
+        .input("Email", sql.NVarChar(320), email)
+        .input("Telefono", sql.NVarChar(50), telefono)
+        .input("WhatsApp", sql.NVarChar(50), whatsapp)
+        .input("PasswordHash", sql.VarBinary(256), null)
+        .input("Activo", sql.Bit, activo == null ? (cur.Activo ? 1 : 0) : activo)
+        .query(`
+          INSERT INTO dbo.Usuario (Nombre, Apellidos, Email, Telefono, WhatsApp, PasswordHash, Activo, FechaCreacion)
+          OUTPUT INSERTED.UsuarioId
+          VALUES (@Nombre, @Apellidos, @Email, @Telefono, @WhatsApp, @PasswordHash, @Activo, SYSUTCDATETIME())
+        `)
+
+      usuarioId = insU.recordset?.[0]?.UsuarioId
+
+      await new sql.Request(tx)
+        .input("UsuarioAdminId", sql.Int, usuarioAdminId)
+        .input("UsuarioId", sql.Int, usuarioId)
+        .query(`
+          UPDATE dbo.UsuarioAdmin
+          SET UsuarioId = @UsuarioId,
+              ActualizadoEn = SYSUTCDATETIME()
+          WHERE UsuarioAdminId = @UsuarioAdminId
+        `)
+    }
+
+    // Update dbo.Usuario (contacto) si existe vínculo
+    if (usuarioId) {
+      const updU = await new sql.Request(tx)
+        .input("UsuarioId", sql.Int, usuarioId)
+        .input("Nombre", sql.NVarChar(160), nombre)
+        .input("Apellidos", sql.NVarChar(240), apellidos)
+        .input("Email", sql.NVarChar(320), email)
+        .input("Telefono", sql.NVarChar(50), telefono)
+        .input("WhatsApp", sql.NVarChar(50), whatsapp)
+        .input("UsuarioActivo", sql.Bit, activo)
+        .query(`
+          UPDATE dbo.Usuario
+          SET
+            Nombre = COALESCE(@Nombre, Nombre),
+            Apellidos = COALESCE(@Apellidos, Apellidos),
+            Email = COALESCE(@Email, Email),
+            Telefono = COALESCE(@Telefono, Telefono),
+            WhatsApp = COALESCE(@WhatsApp, WhatsApp),
+            Activo = COALESCE(@UsuarioActivo, Activo)
+          WHERE UsuarioId = @UsuarioId;
+
+          SELECT @@ROWCOUNT AS Afectadas;
+        `)
+
+      const afectU = updU.recordset?.[0]?.Afectadas || 0
+      if (afectU === 0) {
+        await tx.rollback()
+        return res.status(404).json({ error: "Usuario (contacto) no encontrado para este admin" })
+      }
+    }
+
+    // Update dbo.UsuarioAdmin
+    const setPass = newPassword ? ", PasswordHash = @PasswordHash" : ""
+    const adminDisplayName =
+      nombre || apellidos ? `${nombre || ""}${apellidos ? " " + apellidos : ""}`.trim() : null
+
+    const updUA = await new sql.Request(tx)
+      .input("UsuarioAdminId", sql.Int, usuarioAdminId)
+      .input("Usuario", sql.NVarChar(120), usuarioLogin)
+      .input("AdminNombre", sql.NVarChar(240), adminDisplayName)
+      .input("Rol", sql.NVarChar(60), rol)
+      .input("Activo", sql.Bit, activo)
+      .input("PasswordHash", sql.NVarChar(510), newPassword ? bcrypt.hashSync(newPassword, 10) : null)
+      .query(`
+        UPDATE dbo.UsuarioAdmin
+        SET
+          Usuario = COALESCE(@Usuario, Usuario),
+          Nombre = COALESCE(@AdminNombre, Nombre),
+          Rol = COALESCE(@Rol, Rol),
+          Activo = COALESCE(@Activo, Activo),
+          ActualizadoEn = SYSUTCDATETIME()
+          ${setPass}
+        WHERE UsuarioAdminId = @UsuarioAdminId;
+
+        SELECT @@ROWCOUNT AS Afectadas;
+      `)
+
+    const afectUA = updUA.recordset?.[0]?.Afectadas || 0
+    if (afectUA === 0) {
+      await tx.rollback()
+      return res.status(404).json({ error: "Usuario admin no encontrado" })
+    }
+
+    await tx.commit()
+    res.json({ ok: true })
+  } catch (e) {
+    if (sqlUniqueViolation(e)) {
+      return res.status(409).json({
+        error: "Ya existe un usuario con ese Email o Usuario (login).",
+      })
+    }
+    console.error("ERROR ACTUALIZANDO USUARIO:", e)
+    res.status(500).json({ error: "Error actualizando usuario" })
+  }
+}
+
+// ✅ Frontend usa PUT
+app.put("/api/admin/usuarios/:id", authRequired, updateAdminUsuarioHandler)
+// ✅ Mantengo PATCH por compatibilidad (si lo usás en algún lugar)
+app.patch("/api/admin/usuarios/:id", authRequired, updateAdminUsuarioHandler)
+
+// DELETE (soft delete: desactivar)
+app.delete("/api/admin/usuarios/:id", authRequired, async (req, res) => {
+  const usuarioAdminId = isFiniteId(req.params.id)
+  if (!usuarioAdminId) return res.status(400).json({ error: "Id inválido" })
+
+  try {
+    await detectSchemaOnce()
+    if (!schema.uaUsuarioId) {
+      return res.status(500).json({
+        error: "La BD no tiene dbo.UsuarioAdmin.UsuarioId. Agregalo para habilitar administración de usuarios.",
+      })
+    }
+
+    const tx = new sql.Transaction()
+    await tx.begin()
+
+    const curR = await new sql.Request(tx)
+      .input("UsuarioAdminId", sql.Int, usuarioAdminId)
+      .query(`
+        SELECT TOP 1 UsuarioAdminId, UsuarioId
+        FROM dbo.UsuarioAdmin
+        WHERE UsuarioAdminId = @UsuarioAdminId
+      `)
+
+    const cur = curR.recordset?.[0]
+    if (!cur) {
+      await tx.rollback()
+      return res.status(404).json({ error: "Usuario admin no encontrado" })
+    }
+
+    // Desactivar UsuarioAdmin
+    await new sql.Request(tx)
+      .input("UsuarioAdminId", sql.Int, usuarioAdminId)
+      .query(`
+        UPDATE dbo.UsuarioAdmin
+        SET Activo = 0,
+            ActualizadoEn = SYSUTCDATETIME()
+        WHERE UsuarioAdminId = @UsuarioAdminId
+      `)
+
+    // Desactivar Usuario (contacto) si existe
+    if (cur.UsuarioId) {
+      await new sql.Request(tx)
+        .input("UsuarioId", sql.Int, Number(cur.UsuarioId))
+        .query(`
+          UPDATE dbo.Usuario
+          SET Activo = 0
+          WHERE UsuarioId = @UsuarioId
+        `)
+    }
+
+    await tx.commit()
+    res.json({ ok: true })
+  } catch (e) {
+    console.error("ERROR ELIMINANDO (DESACTIVANDO) USUARIO:", e)
+    res.status(500).json({ error: "Error eliminando usuario" })
   }
 })
 
@@ -180,13 +681,11 @@ app.get("/api/admin/provincias", authRequired, async (req, res) => {
 })
 
 // ===============================
-// DASHBOARD (ADMIN) - STATS / KPIs (NUEVO)
-// GET /api/admin/stats
+// DASHBOARD (ADMIN) - STATS / KPIs
 // ===============================
 app.get("/api/admin/stats", authRequired, async (req, res) => {
   try {
     const r = await new sql.Request().query(`
-      -- Resumen
       SELECT
         (SELECT COUNT(*) FROM dbo.Propiedad) AS PropiedadesTotal,
         (SELECT COUNT(*) FROM dbo.Propiedad WHERE Visible = 1 AND EstadoPublicacion = 'Publicado') AS PropiedadesPublicadas,
@@ -195,7 +694,6 @@ app.get("/api/admin/stats", authRequired, async (req, res) => {
         (SELECT COUNT(*) FROM dbo.Lead WHERE FechaCreacion >= CONVERT(date, GETDATE())) AS LeadsHoy,
         (SELECT COUNT(*) FROM dbo.Lead WHERE FechaCreacion >= DATEADD(day,-6, CONVERT(date, GETDATE()))) AS Leads7Dias;
 
-      -- Leads por estado
       SELECT
         ISNULL(Estado, 'SinEstado') AS Estado,
         COUNT(*) AS Cantidad
@@ -203,7 +701,6 @@ app.get("/api/admin/stats", authRequired, async (req, res) => {
       GROUP BY Estado
       ORDER BY Cantidad DESC;
 
-      -- Leads por canal
       SELECT
         ISNULL(Canal, 'SinCanal') AS Canal,
         COUNT(*) AS Cantidad
@@ -211,7 +708,6 @@ app.get("/api/admin/stats", authRequired, async (req, res) => {
       GROUP BY Canal
       ORDER BY Cantidad DESC;
 
-      -- Leads por día (últimos 14)
       SELECT
         CONVERT(date, FechaCreacion) AS Fecha,
         COUNT(*) AS Cantidad
@@ -220,7 +716,6 @@ app.get("/api/admin/stats", authRequired, async (req, res) => {
       GROUP BY CONVERT(date, FechaCreacion)
       ORDER BY Fecha ASC;
 
-      -- Top propiedades por leads (últimos 30 días)
       SELECT TOP 10
         l.PropiedadId,
         p.Titulo,
@@ -246,7 +741,7 @@ app.get("/api/admin/stats", authRequired, async (req, res) => {
 })
 
 // ===============================
-// CATÁLOGOS (PÚBLICO) - PARA FILTROS
+// CATÁLOGOS (PÚBLICO)
 // ===============================
 app.get("/api/catalogos/provincias", async (req, res) => {
   try {
@@ -329,7 +824,7 @@ app.get("/api/admin/propiedades", authRequired, async (req, res) => {
 })
 
 // ===============================
-// PROPIEDADES (ADMIN) - DETALLE
+// PROPIEDADES (ADMIN) - DETALLE (incluye Agente)
 // ===============================
 app.get("/api/admin/propiedades/:id", authRequired, async (req, res) => {
   const id = isFiniteId(req.params.id)
@@ -361,9 +856,16 @@ app.get("/api/admin/propiedades/:id", authRequired, async (req, res) => {
           p.EstadoPublicacion,
           p.Visible,
           p.Destacada,
-          p.FechaCreacion
+          p.FechaCreacion,
+          p.AgenteId,
+          u.Nombre AS AgenteNombre,
+          u.Apellidos AS AgenteApellidos,
+          u.Email AS AgenteEmail,
+          u.Telefono AS AgenteTelefono,
+          u.WhatsApp AS AgenteWhatsApp
         FROM dbo.Propiedad p
         INNER JOIN dbo.Provincia pr ON pr.ProvinciaId = p.ProvinciaId
+        LEFT JOIN dbo.Usuario u ON u.UsuarioId = p.AgenteId
         WHERE p.PropiedadId = @PropiedadId
       `)
 
@@ -380,6 +882,21 @@ app.get("/api/admin/propiedades/:id", authRequired, async (req, res) => {
       `)
 
     propiedad.Fotos = fotosR.recordset || []
+    propiedad.Agente = {
+      UsuarioId: propiedad.AgenteId || null,
+      Nombre: propiedad.AgenteNombre || null,
+      Apellidos: propiedad.AgenteApellidos || null,
+      Email: propiedad.AgenteEmail || null,
+      Telefono: propiedad.AgenteTelefono || null,
+      WhatsApp: propiedad.AgenteWhatsApp || null,
+    }
+
+    delete propiedad.AgenteNombre
+    delete propiedad.AgenteApellidos
+    delete propiedad.AgenteEmail
+    delete propiedad.AgenteTelefono
+    delete propiedad.AgenteWhatsApp
+
     res.json(propiedad)
   } catch (e) {
     console.error("ERROR DETALLE ADMIN:", e)
@@ -389,21 +906,45 @@ app.get("/api/admin/propiedades/:id", authRequired, async (req, res) => {
 
 // ===============================
 // PROPIEDADES (ADMIN) - CREAR
+// AgenteId = dbo.UsuarioId (FK real)
+// Robustez: si el token no trae usuarioId (token viejo), lo buscamos por usuarioAdminId
 // ===============================
 app.post("/api/admin/propiedades", authRequired, async (req, res) => {
   const b = req.body || {}
   const codigoPublico = `PROP-${Date.now()}`
-  const agenteId = req.user.usuarioAdminId
+
+  let agenteId = req.user?.usuarioId
 
   try {
+    await detectSchemaOnce()
+
+    if (!agenteId && schema.uaUsuarioId && req.user?.usuarioAdminId) {
+      const rr = await new sql.Request()
+        .input("UsuarioAdminId", sql.Int, Number(req.user.usuarioAdminId))
+        .query(`
+          SELECT TOP 1 UsuarioId
+          FROM dbo.UsuarioAdmin
+          WHERE UsuarioAdminId = @UsuarioAdminId
+        `)
+      agenteId = rr.recordset?.[0]?.UsuarioId || null
+    }
+
+    if (!agenteId) {
+      return res.status(500).json({
+        error:
+          "No se pudo determinar el UsuarioId (agente) del admin. " +
+          "Verificá que dbo.UsuarioAdmin tenga UsuarioId y que el admin esté vinculado a dbo.Usuario.",
+      })
+    }
+
     const r = await new sql.Request()
-      .input("CodigoPublico", sql.NVarChar(30), codigoPublico)
-      .input("Titulo", sql.NVarChar(160), b.Titulo)
+      .input("CodigoPublico", sql.NVarChar(60), codigoPublico)
+      .input("Titulo", sql.NVarChar(320), b.Titulo)
       .input("Descripcion", sql.NVarChar(sql.MAX), b.Descripcion || null)
-      .input("Tipo", sql.NVarChar(30), b.Tipo)
-      .input("Condicion", sql.NVarChar(30), b.Condicion || null)
+      .input("Tipo", sql.NVarChar(60), b.Tipo)
+      .input("Condicion", sql.NVarChar(60), b.Condicion || null)
       .input("Precio", sql.Decimal(18, 2), b.Precio)
-      .input("Moneda", sql.NVarChar(10), b.Moneda)
+      .input("Moneda", sql.NVarChar(20), b.Moneda)
       .input("ProvinciaId", sql.TinyInt, b.ProvinciaId)
       .input("DireccionDetallada", sql.NVarChar(250), b.DireccionDetallada || null)
       .input("MetrosTerreno", sql.Decimal(10, 2), b.MetrosTerreno || null)
@@ -459,12 +1000,12 @@ app.put("/api/admin/propiedades/:id", authRequired, async (req, res) => {
   try {
     const r = await new sql.Request()
       .input("PropiedadId", sql.Int, id)
-      .input("Titulo", sql.NVarChar(160), b.Titulo)
+      .input("Titulo", sql.NVarChar(320), b.Titulo)
       .input("Descripcion", sql.NVarChar(sql.MAX), b.Descripcion || null)
-      .input("Tipo", sql.NVarChar(30), b.Tipo)
-      .input("Condicion", sql.NVarChar(30), b.Condicion || null)
+      .input("Tipo", sql.NVarChar(60), b.Tipo)
+      .input("Condicion", sql.NVarChar(60), b.Condicion || null)
       .input("Precio", sql.Decimal(18, 2), b.Precio)
-      .input("Moneda", sql.NVarChar(10), b.Moneda)
+      .input("Moneda", sql.NVarChar(20), b.Moneda)
       .input("ProvinciaId", sql.TinyInt, b.ProvinciaId)
       .input("DireccionDetallada", sql.NVarChar(250), b.DireccionDetallada || null)
       .input("MetrosTerreno", sql.Decimal(10, 2), b.MetrosTerreno || null)
@@ -542,7 +1083,9 @@ app.delete("/api/admin/propiedades/:id", authRequired, async (req, res) => {
     await tx.commit()
     res.json({ ok: true })
   } catch (e) {
-    try { await tx.rollback() } catch {}
+    try {
+      await tx.rollback()
+    } catch {}
     console.error("ERROR DELETE PROPIEDAD:", e)
     res.status(500).json({ error: "Error eliminando propiedad" })
   }
@@ -716,7 +1259,9 @@ app.delete("/api/admin/propiedades/:id/fotos/:fotoId", authRequired, async (req,
     await tx.commit()
     res.json({ ok: true })
   } catch (e) {
-    try { await tx.rollback() } catch {}
+    try {
+      await tx.rollback()
+    } catch {}
     console.error("ERROR DELETE FOTO:", e)
     res.status(500).json({ error: "Error eliminando foto" })
   }
@@ -768,7 +1313,9 @@ app.patch("/api/admin/propiedades/:id/fotos/:fotoId/principal", authRequired, as
     await tx.commit()
     res.json({ ok: true })
   } catch (e) {
-    try { await tx.rollback() } catch {}
+    try {
+      await tx.rollback()
+    } catch {}
     console.error("ERROR SET PRINCIPAL:", e)
     res.status(500).json({ error: "Error marcando principal" })
   }
@@ -848,7 +1395,9 @@ app.patch("/api/admin/propiedades/:id/fotos/orden", authRequired, async (req, re
     await tx.commit()
     res.json({ ok: true })
   } catch (e) {
-    try { await tx.rollback() } catch {}
+    try {
+      await tx.rollback()
+    } catch {}
     console.error("ERROR REORDEN:", e)
     res.status(500).json({ error: "Error reordenando fotos" })
   }
@@ -856,15 +1405,13 @@ app.patch("/api/admin/propiedades/:id/fotos/orden", authRequired, async (req, re
 
 // ===============================
 // PUBLICO - LISTADO (CON FILTROS + ORDEN)
-// GET /api/propiedades?q=&provinciaId=&tipo=&condicion=&precioMin=&precioMax=&habMin=&banosMin=&order=&top=
-// order: recientes | precio_asc | precio_desc
 // ===============================
 app.get("/api/propiedades", async (req, res) => {
   try {
     const q = clipStr(req.query.q, 120)
     const provinciaId = isFiniteId(req.query.provinciaId)
-    const tipo = clipStr(req.query.tipo, 30)
-    const condicion = clipStr(req.query.condicion, 30)
+    const tipo = clipStr(req.query.tipo, 60)
+    const condicion = clipStr(req.query.condicion, 60)
 
     const precioMin = safeNumber(req.query.precioMin)
     const precioMax = safeNumber(req.query.precioMax)
@@ -873,7 +1420,6 @@ app.get("/api/propiedades", async (req, res) => {
 
     const order = clipStr(req.query.order, 30) || "recientes"
 
-    // límite para evitar listados enormes por accidente
     const topRaw = isFiniteId(req.query.top)
     const top = topRaw ? Math.min(Math.max(topRaw, 1), 500) : 200
 
@@ -905,12 +1451,12 @@ app.get("/api/propiedades", async (req, res) => {
 
     if (tipo) {
       where += ` AND p.Tipo = @Tipo `
-      r.input("Tipo", sql.NVarChar(30), tipo)
+      r.input("Tipo", sql.NVarChar(60), tipo)
     }
 
     if (condicion) {
       where += ` AND p.Condicion = @Condicion `
-      r.input("Condicion", sql.NVarChar(30), condicion)
+      r.input("Condicion", sql.NVarChar(60), condicion)
     }
 
     if (precioMin != null) {
@@ -937,8 +1483,8 @@ app.get("/api/propiedades", async (req, res) => {
       order === "precio_asc"
         ? "ORDER BY p.Precio ASC, p.FechaCreacion DESC"
         : order === "precio_desc"
-          ? "ORDER BY p.Precio DESC, p.FechaCreacion DESC"
-          : "ORDER BY p.FechaCreacion DESC"
+        ? "ORDER BY p.Precio DESC, p.FechaCreacion DESC"
+        : "ORDER BY p.FechaCreacion DESC"
 
     const data = await r.query(`
       SELECT TOP (@Top)
@@ -978,7 +1524,7 @@ app.get("/api/propiedades", async (req, res) => {
 })
 
 // ===============================
-// PUBLICO - DETALLE
+// PUBLICO - DETALLE (incluye Agente)
 // ===============================
 app.get("/api/propiedades/:id", async (req, res) => {
   const id = isFiniteId(req.params.id)
@@ -1006,9 +1552,16 @@ app.get("/api/propiedades/:id", async (req, res) => {
           p.Banos,
           p.Parqueos,
           p.TieneCondominio,
-          p.CuotaCondominio
+          p.CuotaCondominio,
+          p.AgenteId,
+          u.Nombre AS AgenteNombre,
+          u.Apellidos AS AgenteApellidos,
+          u.Email AS AgenteEmail,
+          u.Telefono AS AgenteTelefono,
+          u.WhatsApp AS AgenteWhatsApp
         FROM dbo.Propiedad p
         INNER JOIN dbo.Provincia pr ON pr.ProvinciaId = p.ProvinciaId
+        LEFT JOIN dbo.Usuario u ON u.UsuarioId = p.AgenteId
         WHERE p.PropiedadId = @PropiedadId
           AND p.Visible = 1
           AND p.EstadoPublicacion = 'Publicado'
@@ -1027,6 +1580,21 @@ app.get("/api/propiedades/:id", async (req, res) => {
       `)
 
     propiedad.Fotos = fotosR.recordset || []
+    propiedad.Agente = {
+      UsuarioId: propiedad.AgenteId || null,
+      Nombre: propiedad.AgenteNombre || null,
+      Apellidos: propiedad.AgenteApellidos || null,
+      Email: propiedad.AgenteEmail || null,
+      Telefono: propiedad.AgenteTelefono || null,
+      WhatsApp: propiedad.AgenteWhatsApp || null,
+    }
+
+    delete propiedad.AgenteNombre
+    delete propiedad.AgenteApellidos
+    delete propiedad.AgenteEmail
+    delete propiedad.AgenteTelefono
+    delete propiedad.AgenteWhatsApp
+
     res.json(propiedad)
   } catch (e) {
     console.error("ERROR DETALLE PUBLICO:", e)
@@ -1036,7 +1604,7 @@ app.get("/api/propiedades/:id", async (req, res) => {
 
 // ===============================
 // LEADS (PUBLICO) - CREAR
-// body: { PropiedadId, Nombre, Telefono, Email, Mensaje, Canal, _hp }
+// Auto-asignar al agente de la propiedad si existe columna AsignadoAId
 // ===============================
 app.post("/api/leads", rateLimitLeads, async (req, res) => {
   const b = req.body || {}
@@ -1056,24 +1624,47 @@ app.post("/api/leads", rateLimitLeads, async (req, res) => {
   if (!telefono && !email) return res.status(400).json({ error: "Ingresá teléfono o email" })
 
   try {
+    await detectSchemaOnce()
+
     const chk = await new sql.Request()
       .input("PropiedadId", sql.Int, propiedadId)
       .query(`
-        SELECT TOP 1 PropiedadId
+        SELECT TOP 1 PropiedadId, AgenteId
         FROM dbo.Propiedad
         WHERE PropiedadId = @PropiedadId
           AND Visible = 1
           AND EstadoPublicacion = 'Publicado'
       `)
 
-    if (!chk.recordset?.length) {
+    const prop = chk.recordset?.[0]
+    if (!prop) {
       return res.status(404).json({ error: "Propiedad no disponible" })
     }
 
     const ip = clipStr(getClientIp(req), 45)
     const ua = clipStr(req.headers["user-agent"], 300)
-
     const telDb = telefono ? telefono.slice(0, 25) : null
+
+    if (schema.leadAsignadoAId) {
+      const ins = await new sql.Request()
+        .input("PropiedadId", sql.Int, propiedadId)
+        .input("Nombre", sql.NVarChar(120), nombre)
+        .input("Email", sql.NVarChar(160), email)
+        .input("Telefono", sql.NVarChar(25), telDb)
+        .input("Mensaje", sql.NVarChar(1000), mensaje)
+        .input("Canal", sql.NVarChar(20), canal)
+        .input("Estado", sql.NVarChar(20), "Nuevo")
+        .input("Ip", sql.NVarChar(45), ip)
+        .input("UserAgent", sql.NVarChar(300), ua)
+        .input("AsignadoAId", sql.Int, prop.AgenteId || null)
+        .query(`
+          INSERT INTO dbo.Lead (PropiedadId, Nombre, Email, Telefono, Mensaje, Canal, Estado, Ip, UserAgent, AsignadoAId)
+          OUTPUT INSERTED.LeadId
+          VALUES (@PropiedadId, @Nombre, @Email, @Telefono, @Mensaje, @Canal, @Estado, @Ip, @UserAgent, @AsignadoAId)
+        `)
+
+      return res.json({ ok: true, LeadId: ins.recordset?.[0]?.LeadId })
+    }
 
     const ins = await new sql.Request()
       .input("PropiedadId", sql.Int, propiedadId)
@@ -1091,7 +1682,7 @@ app.post("/api/leads", rateLimitLeads, async (req, res) => {
         VALUES (@PropiedadId, @Nombre, @Email, @Telefono, @Mensaje, @Canal, @Estado, @Ip, @UserAgent)
       `)
 
-    res.json({ ok: true, LeadId: ins.recordset?.[0]?.LeadId })
+    return res.json({ ok: true, LeadId: ins.recordset?.[0]?.LeadId })
   } catch (e) {
     console.error("ERROR CREANDO LEAD:", e)
     res.status(500).json({ error: "Error enviando tu consulta" })
@@ -1100,7 +1691,6 @@ app.post("/api/leads", rateLimitLeads, async (req, res) => {
 
 // ===============================
 // LEADS (ADMIN) - LISTAR
-// GET /api/admin/leads?estado=&propiedadId=&q=
 // ===============================
 app.get("/api/admin/leads", authRequired, async (req, res) => {
   const estado = clipStr(req.query.estado, 20)
@@ -1108,6 +1698,8 @@ app.get("/api/admin/leads", authRequired, async (req, res) => {
   const q = clipStr(req.query.q, 120)
 
   try {
+    await detectSchemaOnce()
+
     const r = new sql.Request()
 
     let where = "WHERE 1=1 "
@@ -1124,6 +1716,9 @@ app.get("/api/admin/leads", authRequired, async (req, res) => {
       r.input("Q", sql.NVarChar(140), `%${q}%`)
     }
 
+    const selAsignado = schema.leadAsignadoAId ? ", l.AsignadoAId" : ""
+    const selFecha = schema.leadFechaCreacion ? ", l.FechaCreacion" : ""
+
     const data = await r.query(`
       SELECT
         l.LeadId,
@@ -1135,15 +1730,15 @@ app.get("/api/admin/leads", authRequired, async (req, res) => {
         l.Mensaje,
         l.Canal,
         l.Estado,
-        l.Notas,
-        l.AsignadoAId,
+        l.Notas
+        ${selAsignado},
         l.Ip,
-        l.UserAgent,
-        l.FechaCreacion
+        l.UserAgent
+        ${selFecha}
       FROM dbo.Lead l
       INNER JOIN dbo.Propiedad p ON p.PropiedadId = l.PropiedadId
       ${where}
-      ORDER BY l.FechaCreacion DESC
+      ORDER BY ${schema.leadFechaCreacion ? "l.FechaCreacion" : "l.LeadId"} DESC
     `)
 
     res.json(data.recordset || [])
@@ -1154,9 +1749,7 @@ app.get("/api/admin/leads", authRequired, async (req, res) => {
 })
 
 // ===============================
-// LEADS (ADMIN) - UPDATE (Estado / Notas / AsignadoAId)
-// PATCH /api/admin/leads/:leadId
-// body: { Estado, Notas, AsignadoAId }
+// LEADS (ADMIN) - UPDATE
 // ===============================
 app.patch("/api/admin/leads/:leadId", authRequired, async (req, res) => {
   const leadId = isFiniteId(req.params.leadId)
@@ -1164,8 +1757,7 @@ app.patch("/api/admin/leads/:leadId", authRequired, async (req, res) => {
 
   const estado = clipStr(req.body?.Estado, 20)
   const notas = clipStr(req.body?.Notas, 1000)
-  const asignadoAId =
-    req.body?.AsignadoAId == null ? null : isFiniteId(req.body.AsignadoAId)
+  const asignadoAId = req.body?.AsignadoAId == null ? null : isFiniteId(req.body.AsignadoAId)
 
   const estadosValidos = new Set(["Nuevo", "Contactado", "Cerrado", "Descartado"])
   if (estado && !estadosValidos.has(estado)) {
@@ -1173,6 +1765,12 @@ app.patch("/api/admin/leads/:leadId", authRequired, async (req, res) => {
   }
 
   try {
+    await detectSchemaOnce()
+
+    const setAsignado = schema.leadAsignadoAId
+      ? ", AsignadoAId = COALESCE(@AsignadoAId, AsignadoAId)"
+      : ""
+
     const r = await new sql.Request()
       .input("LeadId", sql.Int, leadId)
       .input("Estado", sql.NVarChar(20), estado)
@@ -1182,8 +1780,8 @@ app.patch("/api/admin/leads/:leadId", authRequired, async (req, res) => {
         UPDATE dbo.Lead
         SET
           Estado = COALESCE(@Estado, Estado),
-          Notas = COALESCE(@Notas, Notas),
-          AsignadoAId = COALESCE(@AsignadoAId, AsignadoAId)
+          Notas = COALESCE(@Notas, Notas)
+          ${setAsignado}
         WHERE LeadId = @LeadId;
 
         SELECT @@ROWCOUNT AS Afectadas;
@@ -1239,6 +1837,7 @@ app.use((err, req, res, next) => {
   next()
 })
 
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en http://localhost:${PORT}`)
+// ✅ Escuchar en 0.0.0.0 y usar process.env.PORT
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor escuchando en puerto ${PORT}`)
 })

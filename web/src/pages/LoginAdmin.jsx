@@ -1,9 +1,10 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001"
+import { loginAdmin } from "../services/api"
 
 export default function LoginAdmin() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   const [usuario, setUsuario] = useState("")
@@ -17,30 +18,25 @@ export default function LoginAdmin() {
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ usuario, password }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || "Credenciales inválidas")
-        setLoading(false)
-        return
-      }
+      const data = await loginAdmin({ usuario, password })
 
       // guardar sesión
-      localStorage.setItem("token", data.token)
-      localStorage.setItem("usuario", JSON.stringify(data.usuario))
+      if (data?.token) localStorage.setItem("token", data.token)
 
-      // redirigir al panel admin (luego lo creamos)
+      // backend nuevo: { token, user }
+      if (data?.user) {
+        localStorage.setItem("user", JSON.stringify(data.user))
+        // compat: por si en algún lugar leés "usuario" (legacy)
+        localStorage.setItem("usuario", JSON.stringify(data.user.usuario || data.user))
+      } else {
+        // compat si alguna vez el backend devuelve algo distinto
+        localStorage.removeItem("user")
+        localStorage.setItem("usuario", JSON.stringify(usuario))
+      }
+
       navigate("/admin")
     } catch (err) {
-      setError("No se pudo conectar con el servidor")
+      setError(err?.message || "No se pudo conectar con el servidor")
     } finally {
       setLoading(false)
     }
@@ -61,16 +57,18 @@ export default function LoginAdmin() {
             value={usuario}
             onChange={(e) => setUsuario(e.target.value)}
             required
+            autoComplete="username"
           />
         </div>
 
         <div style={styles.field}>
-          <label>Contraseña</label>
+          <label>{t("admin.password")}</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
         </div>
 

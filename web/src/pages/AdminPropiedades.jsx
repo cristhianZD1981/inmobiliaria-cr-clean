@@ -56,30 +56,7 @@ export default function AdminPropiedades() {
       setError("")
       setInfo("")
 
-      // Armamos payload completo mínimo (reutilizamos lo que ya viene en la lista + patch)
-      const payload = {
-        Titulo: p.Titulo,
-        Descripcion: p.Descripcion || null, // puede no venir en el listado, pero no lo ocupamos si el backend permite null; igual mejor se edita desde la pantalla.
-        Tipo: p.Tipo,
-        Condicion: p.Condicion || null,
-        Precio: Number(p.Precio || 0),
-        Moneda: p.Moneda,
-        ProvinciaId: p.ProvinciaId || 1, // si no viene, se corrige en editar (por eso el toggle ideal es vía endpoint dedicado; acá lo mantenemos simple)
-        DireccionDetallada: p.DireccionDetallada || null,
-        MetrosTerreno: p.MetrosTerreno || null,
-        MetrosConstruccion: p.MetrosConstruccion || null,
-        Habitaciones: p.Habitaciones || null,
-        Banos: p.Banos || null,
-        Parqueos: p.Parqueos || null,
-        TieneCondominio: p.TieneCondominio ? true : false,
-        CuotaCondominio: p.CuotaCondominio || null,
-        EstadoPublicacion: p.EstadoPublicacion,
-        Visible: !!p.Visible,
-        Destacada: !!p.Destacada,
-        ...patch,
-      }
-
-      // Para no arriesgar ProvinciaId undefined, mejor refrescar el registro desde API admin detalle:
+      // ✅ 1) Traer detalle real para no pisar campos con null
       const det = await fetch(`${API_URL}/api/admin/propiedades/${p.PropiedadId}`, {
         headers: { Authorization: `Bearer ${tk}` },
       })
@@ -89,12 +66,27 @@ export default function AdminPropiedades() {
         return
       }
 
+      // ✅ 2) Construir payload SOLO con campos que el backend PUT usa,
+      // usando el detalle como base + patch
       const fullPayload = {
-        ...detData,
-        Fotos: undefined,
-        Provincia: undefined,
-        FechaCreacion: undefined,
-        ...payload,
+        Titulo: detData.Titulo,
+        Descripcion: detData.Descripcion || null,
+        Tipo: detData.Tipo,
+        Condicion: detData.Condicion || null,
+        Precio: Number(detData.Precio || 0),
+        Moneda: detData.Moneda,
+        ProvinciaId: detData.ProvinciaId,
+        DireccionDetallada: detData.DireccionDetallada || null,
+        MetrosTerreno: detData.MetrosTerreno ?? null,
+        MetrosConstruccion: detData.MetrosConstruccion ?? null,
+        Habitaciones: detData.Habitaciones ?? null,
+        Banos: detData.Banos ?? null,
+        Parqueos: detData.Parqueos ?? null,
+        TieneCondominio: detData.TieneCondominio ? true : false,
+        CuotaCondominio: detData.CuotaCondominio ?? null,
+        EstadoPublicacion: detData.EstadoPublicacion || "Borrador",
+        Visible: !!detData.Visible,
+        Destacada: !!detData.Destacada,
         ...patch,
       }
 
@@ -217,7 +209,7 @@ export default function AdminPropiedades() {
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         style={styles.btnLight}
-                        onClick={() => navigate(`/admin/propiedades/${p.PropiedadId}/editar`)}
+                        onClick={() => navigate(`/admin/propiedades/${p.PropiedadId}`)}
                       >
                         Editar
                       </button>

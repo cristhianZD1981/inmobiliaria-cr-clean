@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { getIntlLocale } from "./i18n"
+import LanguageSelector from "./components/LanguageSelector"
+import logo from "./assets/logo-propiedades-del-sur.png"
 import "./styles/listado.css"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001"
@@ -7,6 +11,8 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001"
 export default function Listado() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
+  const intlLocale = useMemo(() => getIntlLocale(i18n.language), [i18n.language])
 
   // Lee filtros desde la URL
   const init = useMemo(() => {
@@ -46,7 +52,7 @@ export default function Listado() {
   const [order, setOrder] = useState(init.order)
   const [top, setTop] = useState(init.top)
 
-  // Si el usuario usa back/forward o entra por link compartido, sincroniza estados con la URL
+  // Sincroniza estados con la URL
   useEffect(() => {
     setQ(init.q)
     setProvinciaId(init.provinciaId)
@@ -63,7 +69,7 @@ export default function Listado() {
 
   useEffect(() => {
     cargarCatalogos()
-    cargar() // carga inicial con lo que venga en URL
+    cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -153,31 +159,40 @@ export default function Listado() {
 
   const total = propiedades.length
   const resumen = useMemo(() => {
-    if (loading) return "Cargando..."
+    if (loading) return t("common.loading")
     if (error) return ""
-    return `${total} resultado${total === 1 ? "" : "s"}`
-  }, [loading, error, total])
+    return t("common.results", { count: total })
+  }, [loading, error, total, t])
 
   return (
     <main className="listado-page">
       <header className="listado-header">
         <div className="listado-container listado-header-inner">
-          <h1 className="listado-logo">Propiedades del sur</h1>
+          {/* ✅ Logo + texto (desktop) / solo icono (mobile) */}
+          <h1 className="listado-logo">
+            <Link to="/" className="brand-link" aria-label={t("home.brand")}>
+              <img src={logo} alt="" aria-hidden="true" className="brand-mark" />
+              <span className="brand-text">{t("home.brand")}</span>
+            </Link>
+          </h1>
 
           <nav className="listado-nav">
             <Link to="/" className="listado-nav-link">
-              Inicio
+              {t("nav.home")}
             </Link>
             <Link to="/admin/login" className="listado-admin-btn">
-              Admin
+              {t("nav.admin")}
             </Link>
+
+            {/* ✅ Selector de idioma visible */}
+            <LanguageSelector className="lang-select" />
           </nav>
         </div>
       </header>
 
       <section className="listado-container listado-content">
         <div className="listado-title-row">
-          <h2 className="listado-title">Propiedades disponibles</h2>
+          <h2 className="listado-title">{t("list.title")}</h2>
           <span className="listado-badge">{resumen}</span>
         </div>
 
@@ -185,7 +200,7 @@ export default function Listado() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar (título, provincia, código, descripción...)"
+            placeholder={t("common.searchPlaceholder")}
             className="listado-input"
           />
 
@@ -194,7 +209,7 @@ export default function Listado() {
             onChange={(e) => setProvinciaId(e.target.value)}
             className="listado-input"
           >
-            <option value="">Todas las provincias</option>
+            <option value="">{t("list.allProvinces")}</option>
             {provincias.map((p) => (
               <option key={p.ProvinciaId} value={String(p.ProvinciaId)}>
                 {p.Nombre}
@@ -203,7 +218,7 @@ export default function Listado() {
           </select>
 
           <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="listado-input">
-            <option value="">Todos los tipos</option>
+            <option value="">{t("common.allTypes")}</option>
             {tipos.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -216,7 +231,7 @@ export default function Listado() {
             onChange={(e) => setCondicion(e.target.value)}
             className="listado-input"
           >
-            <option value="">Cualquier condición</option>
+            <option value="">{t("common.anyCondition")}</option>
             {condiciones.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -229,7 +244,7 @@ export default function Listado() {
             inputMode="numeric"
             value={precioMin}
             onChange={(e) => setPrecioMin(e.target.value)}
-            placeholder="Precio mínimo"
+            placeholder={t("common.minPrice")}
             className="listado-input"
           />
 
@@ -238,7 +253,7 @@ export default function Listado() {
             inputMode="numeric"
             value={precioMax}
             onChange={(e) => setPrecioMax(e.target.value)}
-            placeholder="Precio máximo"
+            placeholder={t("common.maxPrice")}
             className="listado-input"
           />
 
@@ -247,7 +262,7 @@ export default function Listado() {
             inputMode="numeric"
             value={habMin}
             onChange={(e) => setHabMin(e.target.value)}
-            placeholder="Habitaciones mín."
+            placeholder={t("common.bedroomsMin")}
             className="listado-input"
           />
 
@@ -256,14 +271,14 @@ export default function Listado() {
             inputMode="numeric"
             value={banosMin}
             onChange={(e) => setBanosMin(e.target.value)}
-            placeholder="Baños mín."
+            placeholder={t("common.bathroomsMin")}
             className="listado-input"
           />
 
           <select value={order} onChange={(e) => setOrder(e.target.value)} className="listado-input">
-            <option value="recientes">Más recientes</option>
-            <option value="precio_asc">Precio: menor a mayor</option>
-            <option value="precio_desc">Precio: mayor a menor</option>
+            <option value="recientes">{t("common.orderRecent")}</option>
+            <option value="precio_asc">{t("common.orderPriceAsc")}</option>
+            <option value="precio_desc">{t("common.orderPriceDesc")}</option>
           </select>
 
           <select value={top} onChange={(e) => setTop(e.target.value)} className="listado-input">
@@ -275,15 +290,15 @@ export default function Listado() {
 
           <div className="listado-actions">
             <button type="submit" className="btn btn-primary">
-              Aplicar filtros
+              {t("common.applyFilters")}
             </button>
             <button type="button" onClick={limpiar} className="btn btn-secondary">
-              Limpiar
+              {t("common.clear")}
             </button>
           </div>
         </form>
 
-        {loading && <p className="listado-info">Cargando propiedades...</p>}
+        {loading && <p className="listado-info">{t("common.loadingProperties")}</p>}
         {error && <p className="listado-error">{error}</p>}
 
         <div className="listado-grid">
@@ -292,39 +307,47 @@ export default function Listado() {
               key={p.PropiedadId}
               to={`/propiedades/${p.PropiedadId}`}
               className="listado-card"
-              title="Ver detalle"
+              title={t("common.viewDetails")}
             >
               <div className="listado-card-image">
                 {p.Imagen ? (
-                  <img src={p.Imagen} alt={p.Titulo || "Propiedad"} loading="lazy" />
+                  <img src={p.Imagen} alt={p.Titulo || t("common.property")} loading="lazy" />
                 ) : (
                   <div className="listado-card-placeholder" aria-hidden="true" />
                 )}
                 <span className="listado-card-badge">
-                  {p.Tipo || "Propiedad"}
+                  {p.Tipo || t("common.property")}
                   {p.Condicion ? ` • ${p.Condicion}` : ""}
                 </span>
               </div>
 
               <div className="listado-card-body">
-                <div className="listado-card-title">{p.Titulo || "Propiedad"}</div>
+                <div className="listado-card-title">{p.Titulo || t("common.property")}</div>
 
                 <div className="listado-card-price">
                   {p.Moneda === "CRC" ? "₡" : "$"}
-                  {Number(p.Precio || 0).toLocaleString("es-CR")}
+                  {Number(p.Precio || 0).toLocaleString(intlLocale)}
                 </div>
 
-                <div className="listado-card-location">{p.Provincia || "Costa Rica"}</div>
+                <div className="listado-card-location">{p.Provincia || t("common.costaRica")}</div>
 
                 <div className="listado-card-meta">
-                  <span>{p.Habitaciones ? `${p.Habitaciones} hab` : "— hab"}</span>
-                  <span>{p.Banos ? `${p.Banos} baños` : "— baños"}</span>
+                  <span>
+                    {p.Habitaciones
+                      ? `${p.Habitaciones} ${t("detail.bedsShort")}`
+                      : `— ${t("detail.bedsShort")}`}
+                  </span>
+                  <span>
+                    {p.Banos
+                      ? `${p.Banos} ${t("detail.bathsShort")}`
+                      : `— ${t("detail.bathsShort")}`}
+                  </span>
                   <span>
                     {p.MetrosConstruccion
                       ? `${p.MetrosConstruccion} m²`
                       : p.MetrosTerreno
-                        ? `${p.MetrosTerreno} m²`
-                        : "— m²"}
+                      ? `${p.MetrosTerreno} m²`
+                      : "— m²"}
                   </span>
                 </div>
               </div>
@@ -333,9 +356,7 @@ export default function Listado() {
         </div>
       </section>
 
-      <footer className="listado-footer">
-        © {new Date().getFullYear()} Propiedades del sur
-      </footer>
+      <footer className="listado-footer">© {new Date().getFullYear()} {t("home.brand")}</footer>
     </main>
   )
 }

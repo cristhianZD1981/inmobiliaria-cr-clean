@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { getIntlLocale } from "../i18n"
+import LanguageSelector from "../components/LanguageSelector"
+import logo from "../assets/logo-propiedades-del-sur.png"
 import "../styles/home.css"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001"
 
-function formatMoney(value, moneda) {
+function formatMoney(value, moneda, locale) {
   const num = Number(value || 0)
   const currency = moneda === "USD" ? "USD" : "CRC"
-  return new Intl.NumberFormat("es-CR", {
+  return new Intl.NumberFormat(locale || "es-CR", {
     style: "currency",
     currency,
     maximumFractionDigits: currency === "CRC" ? 0 : 2,
@@ -15,6 +19,9 @@ function formatMoney(value, moneda) {
 }
 
 export default function Home() {
+  const { t, i18n } = useTranslation()
+  const intlLocale = useMemo(() => getIntlLocale(i18n.language), [i18n.language])
+
   const navigate = useNavigate()
 
   // Datos para la home
@@ -94,16 +101,25 @@ export default function Home() {
       {/* HEADER */}
       <header className="home-header">
         <div className="home-container home-header-inner">
-          <h1 className="home-logo">Propiedades del sur</h1>
+          {/* ✅ Logo + texto (desktop) / solo icono (mobile) */}
+          <h1 className="home-logo">
+            <Link to="/" className="brand-link" aria-label={t("home.brand")}>
+              <img src={logo} alt="" aria-hidden="true" className="brand-mark" />
+              <span className="brand-text">{t("home.brand")}</span>
+            </Link>
+          </h1>
 
           <nav className="home-nav" aria-label="Navegación principal">
             <Link to="/propiedades" className="home-nav-link">
-              Ver propiedades
+              {t("home.ctaBrowse")}
             </Link>
 
             <Link to="/admin/login" className="home-admin-btn">
               Admin
             </Link>
+
+            {/* ✅ Selector de idioma visible */}
+            <LanguageSelector className="input" />
           </nav>
         </div>
       </header>
@@ -112,18 +128,13 @@ export default function Home() {
       <section className="home-hero">
         <div className="home-container home-hero-inner">
           <div className="home-hero-copy">
-            <p className="home-hero-eyebrow">Propiedades en Costa Rica</p>
-            <h2 className="home-hero-title">
-              Encontrá tu próxima propiedad sin perder tiempo
-            </h2>
-            <p className="home-hero-subtitle">
-              Buscá por provincia, tipo y presupuesto. Listados con fotos y detalles claros para
-              tomar mejores decisiones.
-            </p>
+            <p className="home-hero-eyebrow">{t("home.eyebrow")}</p>
+            <h2 className="home-hero-title">{t("home.title")}</h2>
+            <p className="home-hero-subtitle">{t("home.subtitle")}</p>
 
             <div className="home-hero-actions">
               <Link to="/propiedades" className="btn btn-primary">
-                Explorar propiedades
+                {t("home.ctaExplore")}
               </Link>
 
               {/* ✅ FIX: mantenemos <a>, pero evitamos que HashRouter rompa la ruta */}
@@ -136,7 +147,7 @@ export default function Home() {
                   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
                 }}
               >
-                Ver destacadas
+                {t("home.ctaFeatured")}
               </a>
             </div>
 
@@ -153,8 +164,8 @@ export default function Home() {
           {/* Buscador */}
           <aside className="home-search" aria-label="Buscador rápido">
             <div className="home-search-card">
-              <h3 className="home-search-title">Buscá rápido</h3>
-              <p className="home-search-subtitle">Probá con provincia + tipo + precio máximo.</p>
+              <h3 className="home-search-title">{t("home.quickSearchTitle")}</h3>
+              <p className="home-search-subtitle">{t("home.quickSearchSubtitle")}</p>
 
               <form onSubmit={onBuscar} className="home-search-form">
                 <label className="sr-only" htmlFor="q">
@@ -165,7 +176,7 @@ export default function Home() {
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   className="input"
-                  placeholder="Ej: Escazú, cerca de la playa…"
+                  placeholder={t("home.placeholderQuery")}
                 />
 
                 <label className="sr-only" htmlFor="provincia">
@@ -216,12 +227,10 @@ export default function Home() {
                 />
 
                 <button className="btn btn-primary btn-block" type="submit">
-                  Buscar propiedades
+                  {t("home.searchBtn")}
                 </button>
 
-                <div className="home-search-hint">
-                  Tip: podés afinar más filtros dentro del listado.
-                </div>
+                <div className="home-search-hint">{t("home.searchHint")}</div>
               </form>
             </div>
           </aside>
@@ -234,7 +243,7 @@ export default function Home() {
           <div className="home-section-head">
             <h3 className="home-section-title">Propiedades destacadas</h3>
             <Link to="/propiedades" className="home-section-link">
-              Ver todas →
+              {t("home.seeAll")} →
             </Link>
           </div>
 
@@ -258,7 +267,7 @@ export default function Home() {
                 >
                   <div className="property-image">
                     {p.Imagen ? (
-                      <img src={p.Imagen} alt={p.Titulo || "Propiedad"} loading="lazy" />
+                      <img src={p.Imagen} alt={p.Titulo || t("common.property")} loading="lazy" />
                     ) : (
                       <div className="property-image-placeholder" aria-hidden="true" />
                     )}
@@ -269,19 +278,29 @@ export default function Home() {
                   </div>
 
                   <div className="property-body">
-                    <div className="property-price">{formatMoney(p.Precio, p.Moneda)}</div>
-                    <div className="property-title">{p.Titulo || "Propiedad"}</div>
-                    <div className="property-location">{p.Provincia || "Costa Rica"}</div>
+                    <div className="property-price">
+                      {formatMoney(p.Precio, p.Moneda, intlLocale)}
+                    </div>
+                    <div className="property-title">{p.Titulo || t("common.property")}</div>
+                    <div className="property-location">{p.Provincia || t("common.costaRica")}</div>
 
                     <div className="property-meta">
-                      <span>{p.Habitaciones ? `${p.Habitaciones} hab` : "— hab"}</span>
-                      <span>{p.Banos ? `${p.Banos} baños` : "— baños"}</span>
+                      <span>
+                        {p.Habitaciones
+                          ? `${p.Habitaciones} ${t("detail.bedsShort")}`
+                          : `— ${t("detail.bedsShort")}`}
+                      </span>
+                      <span>
+                        {p.Banos
+                          ? `${p.Banos} ${t("detail.bathsShort")}`
+                          : `— ${t("detail.bathsShort")}`}
+                      </span>
                       <span>
                         {p.MetrosConstruccion
                           ? `${p.MetrosConstruccion} m²`
                           : p.MetrosTerreno
-                            ? `${p.MetrosTerreno} m²`
-                            : "— m²"}
+                          ? `${p.MetrosTerreno} m²`
+                          : "— m²"}
                       </span>
                     </div>
                   </div>
@@ -331,7 +350,7 @@ export default function Home() {
 
           <div className="home-cta-actions">
             <Link to="/propiedades" className="btn btn-primary">
-              Ver propiedades
+              {t("home.ctaBrowse")}
             </Link>
           </div>
         </div>
@@ -341,7 +360,7 @@ export default function Home() {
       <footer className="home-footer">
         <div className="home-container home-footer-inner">
           <div className="home-footer-brand">
-            <div className="home-footer-logo">Propiedades del sur</div>
+            <div className="home-footer-logo">{t("home.brand")}</div>
             <div className="home-footer-muted">Compra y venta de propiedades en Costa Rica.</div>
           </div>
 
